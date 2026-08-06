@@ -160,7 +160,7 @@
       </div>
     </div>
     <div class="demo">
-      <div class="bar"><span class="dot">● живой рендер</span><span>сетка 80×44 · ASCII</span></div>
+      <div class="bar"><span class="dot">● живой рендер</span><span>сетка 100×100 · аватар из Головастика</span></div>
       <pre id="head"></pre>
     </div>
   </div>
@@ -236,10 +236,8 @@
 <script>
 (function () {
   var pre = document.getElementById('head')
-  var map = null
-  var cols = 80, rows = 0
+  var model = null
   var holes = []
-  var blinkTimer = null
 
   // same flood-fill hole detection as the app's headMap.ts
   function findHoles(mask, W, H) {
@@ -280,13 +278,13 @@
   }
 
   function render(blink) {
-    if (!map) return
+    if (!model) return
     var out = []
-    for (var y = 0; y < map.length; y++) {
-      var line = map[y]
+    for (var y = 0; y < model.rows; y++) {
+      var line = model.grid_char[y]
       var outLine = ''
-      for (var x = 0; x < cols; x++) {
-        var ch = x < line.length ? line[x] : ' '
+      for (var x = 0; x < model.cols; x++) {
+        var ch = x < line.length && line[x] !== ' ' ? line[x] : ' '
         if (blink) {
           for (var k = 0; k < holes.length; k++) {
             var h = holes[k]
@@ -300,22 +298,22 @@
     pre.textContent = out.join('\n')
   }
 
-  fetch('head_map.txt')
-    .then(function (r) { return r.text() })
-    .then(function (txt) {
-      var lines = txt.replace(/\r/g, '').split('\n')
-      map = lines
-      var mask = lines.map(function (l) {
-        var row = []
-        for (var x = 0; x < cols; x++) row.push(x < l.length ? l[x] !== ' ' : false)
-        return row
+  fetch('avatar.json')
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
+    .then(function (m) {
+      model = m
+      pre.style.fontSize = Math.max(5, Math.min(12, Math.floor(440 / (m.cols * 0.6)))) + 'px'
+      var mask = m.grid_char.map(function (row) {
+        var rr = []
+        for (var x = 0; x < m.cols; x++) rr.push(x < row.length ? row[x] !== ' ' : false)
+        return rr
       })
-      rows = lines.length
-      // eye holes: upper band (y 7..23), one left and one right of the center line
-      var all = findHoles(mask, cols, rows)
-        .filter(function (h) { return h.y >= 7 && h.y <= 23 })
-      var left = all.filter(function (h) { return h.x + h.w / 2 < 39 })
-      var right = all.filter(function (h) { return h.x + h.w / 2 >= 39 })
+      // eye holes: upper band of the face, one left + one right of center
+      var cx = Math.floor(m.cols / 2)
+      var upper = findHoles(mask, m.cols, m.rows)
+        .filter(function (h) { return h.y + h.h / 2 < m.rows * 0.55 })
+      var left = upper.filter(function (h) { return h.x + h.w / 2 < cx })
+      var right = upper.filter(function (h) { return h.x + h.w / 2 >= cx })
       function biggest(a, b) { return (b.w * b.h) - (a.w * a.h) }
       left.sort(biggest)
       right.sort(biggest)
@@ -323,11 +321,11 @@
       render(false)
       setInterval(function () {
         render(true)
-        setTimeout(function () { render(false) }, 260)
-      }, 4200)
+        setTimeout(function () { render(false) }, 220)
+      }, 3600)
     })
     .catch(function () {
-      pre.textContent = '// не удалось загрузить head_map.txt'
+      pre.textContent = '// не удалось загрузить avatar.json'
     })
 })()
 </script>
