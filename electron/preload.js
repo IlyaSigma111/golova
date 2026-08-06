@@ -15,10 +15,17 @@ contextBridge.exposeInMainWorld('onyx', {
     return () => ipcRenderer.removeListener('display:changed', h)
   },
   openFile: (opts) => ipcRenderer.invoke('dialog:openFile', opts),
+  openFiles: (opts) => ipcRenderer.invoke('dialog:openFiles', opts),
   saveFile: (opts) => ipcRenderer.invoke('dialog:saveFile', opts),
   readText: (p) => ipcRenderer.invoke('fs:readText', p),
   readBinary: (p) => ipcRenderer.invoke('fs:readBinary', p),
   writeText: (p, d) => ipcRenderer.invoke('fs:writeText', p, d),
+  sendState: (p) => ipcRenderer.send('state:send', p),
+  onState: (cb) => {
+    const h = (_e, p) => cb(p)
+    ipcRenderer.on('state:apply', h)
+    return () => ipcRenderer.removeListener('state:apply', h)
+  },
   scriptsLoad: () => ipcRenderer.invoke('data:scriptsLoad'),
   scriptsSave: (d) => ipcRenderer.invoke('data:scriptsSave', d),
   paramsLoad: () => ipcRenderer.invoke('data:paramsLoad'),

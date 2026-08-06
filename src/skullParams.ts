@@ -26,6 +26,16 @@ const DEFAULTS: SkullParamsData = {
   color_effect_active: false,
   color_effect_target: 'red',
   previous_color: 'red',
+  head_scale: 1.0,
+  visualizer_intensity: 1.0,
+  particles_intensity: 1.0,
+  waves_intensity: 1.0,
+  glitch_intensity: 0.6,
+  alarm_intensity: 1.0,
+  terminal_intensity: 1.0,
+  matrix_intensity: 1.0,
+  shatter_intensity: 1.0,
+  erosion_intensity: 1.0,
 }
 
 export class SkullParams {

@@ -64,6 +64,22 @@ function colorForEffect(target: string, g: number): RGB {
 
 export class EffectsEngine {
   fade_speed = 0.04
+  intensity: Record<string, number> = {
+    visualizer: 1,
+    particles: 1,
+    waves: 1,
+    glitch: 0.6,
+    alarm: 1,
+    terminal: 1,
+    matrix: 1,
+    shatter: 1,
+  }
+
+  setIntensity(key: string, value: number) {
+    const v = Math.max(0, Math.min(1, value))
+    this.intensity[key] = v
+    if (key === 'glitch' && this.glitch_active) this.glitch_target_intensity = v
+  }
 
   visualizer_active = true
   visualizer_target = 1
@@ -130,7 +146,7 @@ export class EffectsEngine {
   setWaves(active: boolean) { this.waves_target = active ? 1 : 0 }
 
   toggleGlitch(active: boolean, width = 1920, height = 1080) {
-    this.glitch_target_intensity = active ? 0.6 : 0
+    this.glitch_target_intensity = active ? this.intensity.glitch : 0
     this.glitch_active = active
     if (active && !this.glitch_lines.length) {
       for (let i = 0; i < 5; i++) {
@@ -579,7 +595,8 @@ export class EffectsEngine {
 
   private drawVisualizer(ctx: CanvasRenderingContext2D, width: number, height: number) {
     if (this.visualizer_current < 0.01) return
-    const opacity = this.visualizer_current
+    const opacity = this.visualizer_current * this.intensity.visualizer
+    if (opacity < 0.01) return
     for (let i = 0; i < this.visualizer_smooth.length; i++) {
       this.visualizer_smooth[i] += (this.visualizer_data[i] - this.visualizer_smooth[i]) * 0.25
     }
@@ -600,7 +617,8 @@ export class EffectsEngine {
 
   private drawWaves(ctx: CanvasRenderingContext2D, width: number, height: number, amplitude: number, colorEffect: boolean, target: string) {
     if (this.waves_current < 0.01) return
-    const opacity = this.waves_current
+    const opacity = this.waves_current * this.intensity.waves
+    if (opacity < 0.01) return
     this.wave_timer += 0.025
     const yBase = height * 0.5
     const [r, g, b] = colorEffect ? colorForEffect(target, 200) : [0, 200, 100]
@@ -628,7 +646,8 @@ export class EffectsEngine {
 
   private drawCodeParticles(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
     if (!this.code_particles.length || this.code_particles_current < 0.01) return
-    const opacityMult = this.code_particles_current
+    const opacityMult = this.code_particles_current * this.intensity.particles
+    if (opacityMult < 0.01) return
     const [r, g, b] = colorEffect ? (target === 'red' ? [255, 30, 30] : [255, 255, 255]) : [0, 255, 80]
     ctx.textBaseline = 'alphabetic'
     for (const p of this.code_particles) {
@@ -654,7 +673,8 @@ export class EffectsEngine {
 
   private drawTerminal(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
     if (!this.terminal_lines.length || this.terminal_current < 0.01) return
-    const opacity = this.terminal_current * 0.6
+    const opacity = this.terminal_current * 0.6 * this.intensity.terminal
+    if (opacity < 0.01) return
     const [r, g, b] = colorEffect ? colorForEffect(target, 255) : [0, 255, 0]
     ctx.textBaseline = 'alphabetic'
     for (const line of this.terminal_lines) {
@@ -670,7 +690,8 @@ export class EffectsEngine {
 
   private drawMatrix(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
     if (!this.matrix_drops.length || this.matrix_current < 0.01) return
-    const opacity = this.matrix_current
+    const opacity = this.matrix_current * this.intensity.matrix
+    if (opacity < 0.01) return
     const [r, g, b] = colorEffect ? colorForEffect(target, 255) : [0, 255, 0]
     ctx.textBaseline = 'alphabetic'
     ctx.font = '12px Consolas, monospace'
@@ -697,7 +718,8 @@ export class EffectsEngine {
 
   private drawAlarm(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
     if (!this.alarm_items.length || this.alarm_current < 0.01) return
-    const opacity = this.alarm_current * 0.6
+    const opacity = this.alarm_current * 0.6 * this.intensity.alarm
+    if (opacity < 0.01) return
     let cr = 255, cg = 0, cb = 0
     if (colorEffect) {
       if (target === 'red') [cr, cg, cb] = [255, 50, 50]
@@ -722,7 +744,7 @@ export class EffectsEngine {
   }
 
   private drawGlitch(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    const intensity = this.glitch_current_intensity
+    const intensity = this.glitch_current_intensity * this.intensity.glitch
     if (intensity < 0.01) return
     for (const line of this.glitch_lines) {
       const y = line.y
@@ -789,7 +811,8 @@ export class EffectsEngine {
 
   drawShatterFallingChars(ctx: CanvasRenderingContext2D, width: number, height: number, renderer: SkullRenderer) {
     if (!this.shatter_falling_chars.length) return
-    const opacity = this.shatter_current
+    const opacity = this.shatter_current * this.intensity.shatter
+    if (opacity < 0.01) return
     const cellX = width / renderer.cols
     const cellY = height / renderer.rows
     const cellSize = Math.min(cellX, cellY) * 0.85

@@ -24,6 +24,16 @@ export interface SkullParamsData {
   color_effect_active: boolean
   color_effect_target: 'red' | 'white' | 'reset'
   previous_color: 'red' | 'white'
+  head_scale: number
+  visualizer_intensity: number
+  particles_intensity: number
+  waves_intensity: number
+  glitch_intensity: number
+  alarm_intensity: number
+  terminal_intensity: number
+  matrix_intensity: number
+  shatter_intensity: number
+  erosion_intensity: number
 }
 
 export interface ScriptData {
@@ -54,3 +64,13 @@ export interface EffectToggles {
   shatter: boolean
   erosion: boolean
 }
+
+export type StateMsg =
+  | { kind: 'sync'; params: SkullParamsData; toggles: EffectToggles; emotion: number; isPlaying: boolean; amplitude: number }
+  | { kind: 'params'; data: SkullParamsData }
+  | { kind: 'audio'; isPlaying: boolean; amplitude: number }
+  | { kind: 'emotion'; emotion: number }
+  | { kind: 'effects'; toggles: EffectToggles }
+  | { kind: 'color'; color: 'red' | 'white' | 'reset' }
+  | { kind: 'resetMouth' }
+  | { kind: 'video'; playing: boolean; path: string | null }

@@ -6,12 +6,12 @@ let controlWindow = null
 const childWindows = new Map() // id -> { win, kind }
 
 const DEV = !app.isPackaged
-const indexPath = DEV
-  ? process.env.VITE_DEV_SERVER_URL
-  : `file://${path.join(__dirname, '..', 'dist', 'index.html')}`
+const indexPath = app.isPackaged
+  ? `file://${path.join(__dirname, '..', 'dist', 'index.html')}`
+  : (process.env.VITE_DEV_SERVER_URL || `file://${path.join(__dirname, '..', 'dist', 'index.html')}`)
 
 function loadWithHash(win, hash) {
-  if (DEV) {
+  if (!app.isPackaged && process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${hash}`)
   } else {
     win.loadURL(`file://${path.join(__dirname, '..', 'dist', 'index.html')}#${hash}`)
@@ -34,8 +34,22 @@ function createControlWindow() {
     },
   })
   loadWithHash(controlWindow, '')
-  controlWindow.on('closed', () => { controlWindow = null })
+  controlWindow.on('closed', () => {
+    controlWindow = null
+    for (const [, { win }] of childWindows) {
+      if (!win.isDestroyed()) win.close()
+    }
+    childWindows.clear()
+  })
 }
+
+ipcMain.on('state:send', (e, payload) => {
+  for (const [, { win }] of childWindows) {
+    if (!win.isDestroyed() && win.webContents.id !== e.sender.id) {
+      win.webContents.send('state:apply', payload)
+    }
+  }
+})
 
 function displayForWindow(win) {
   if (win && !win.isDestroyed()) {
@@ -194,6 +208,17 @@ ipcMain.handle('dialog:openFile', async (e, opts) => {
   })
   if (res.canceled || res.filePaths.length === 0) return null
   return res.filePaths[0]
+})
+
+ipcMain.handle('dialog:openFiles', async (e, opts) => {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  const res = await dialog.showOpenDialog(win, {
+    title: opts?.title || 'Выберите файлы',
+    filters: opts?.filters || [],
+    properties: ['openFile', 'multiSelections'],
+  })
+  if (res.canceled || res.filePaths.length === 0) return []
+  return res.filePaths
 })
 
 ipcMain.handle('fs:readText', async (e, p) => {

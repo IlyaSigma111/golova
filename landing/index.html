@@ -87,6 +87,7 @@
   .btn-accent { border-color: #00ffaa; color: #00ffaa; }
   .btn-accent:hover { background: rgba(0,255,170,.1); box-shadow: 0 0 14px rgba(0,255,170,.3); }
   .hint { font-size: 12px; color: var(--fg-muted); margin-top: 12px; width: 100%; }
+  .hint-em { color: var(--green); }
 
   /* live head demo */
   .demo {
@@ -152,9 +153,10 @@
         и видно сразу, плывёт ли голова при смене разрешения.
       </p>
       <div class="buttons" id="download">
-        <a class="btn btn-primary" href="https://github.com/IlyaSigma111/golova/releases/latest" target="_blank" rel="noopener">⬇ Скачать</a>
-        <a class="btn btn-accent" href="#how">Как проверить мониторы</a>
-        <div class="hint">Windows · installer + portable exe · релизы на GitHub</div>
+        <a class="btn btn-primary" href="https://github.com/IlyaSigma111/golova/releases/download/v0.1.1/Golova-Setup-0.1.1.exe" download>⬇ Установщик</a>
+        <a class="btn btn-accent" href="https://github.com/IlyaSigma111/golova/releases/download/v0.1.1/Golova-0.1.1-portable.exe" download>⬇ Портативная версия</a>
+        <a class="btn" href="#how">Как проверить мониторы</a>
+        <div class="hint">Скачивание начнётся сразу · Windows · v0.1.1 · <span class="hint-em">для тестов рекомендуется установщик</span></div>
       </div>
     </div>
     <div class="demo">
@@ -188,6 +190,21 @@
         <p>Маска головы сгенерирована из референса. Глаза, нос и рот — пустые зоны, которые оживают анимациями.</p>
         <span class="key">head_map.txt</span>
       </div>
+      <div class="card">
+        <h3>Размер головы</h3>
+        <p>Ползунок «Размер головы» масштабирует символьную сетку от 0.4× до 2.4× прямо в предпросмотре — значение сохраняется в аватаре.</p>
+        <span class="key">head_scale</span>
+      </div>
+      <div class="card">
+        <h3>Интенсивность эффектов</h3>
+        <p>Отдельные регуляторы для каждого эффекта: помехи, эрозия, тревога, терминал, матрица, рассыпание, визуализатор, символы кода и волны — от 0% до 100%.</p>
+        <span class="key">9 ползунков</span>
+      </div>
+      <div class="card">
+        <h3>Чистый вывод</h3>
+        <p>Окно рендера без HUD и подсказок — голова занимает всю площадь экрана. Управление только клавишами: F — полный экран, Esc — закрыть.</p>
+        <span class="key">без интерфейса</span>
+      </div>
     </div>
   </div>
 </section>
@@ -198,7 +215,7 @@
     <ol>
       <li>Запустите приложение — откроется панель управления с таблицей всех дисплеев (разрешение, workArea, масштаб).</li>
       <li>Нажмите <strong>«🖥 Тест окон на разных мониторах»</strong> — на каждом экране появится окно с головой.</li>
-      <li>Внизу каждого окна HUD показывает текущее разрешение, размер клетки и шрифт. <strong>F</strong> — полный экран, <strong>Esc</strong> — закрыть.</li>
+      <li>Окно рендера чистое, без HUD — голова рисуется на всю площадь. <strong>F</strong> — полный экран, <strong>Esc</strong> — закрыть.</li>
       <li>Если голова остаётся по центру и сохраняет пропорции на всех экранах — адаптивность работает.</li>
     </ol>
   </div>

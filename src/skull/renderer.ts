@@ -103,8 +103,13 @@ export class SkullRenderer {
   erosion_duration = 3
   erosion_max_cells = 20
   erosion_fade_speed = 0.3
+  erosion_intensity = 1
   falling_chars: FallingChar[] = []
   face_cells: Array<[number, number]> = []
+
+  setErosionIntensity(v: number) {
+    this.erosion_intensity = Math.max(0.05, Math.min(1, v))
+  }
 
   constructor(params: SkullParams) {
     this.params = params
@@ -396,14 +401,14 @@ export class SkullRenderer {
     if (!this.erosion_active || !this.face_cells.length) return
     const dt = 0.016
     this.erosion_timer += dt
-    if (this.erosion_timer >= this.erosion_interval) {
+    if (this.erosion_timer >= this.erosion_interval / this.erosion_intensity) {
       this.erosion_timer = 0
       let erodedCount = 0
       for (const d of this.erosion_cells.values()) if (d.eroded) erodedCount++
       if (erodedCount < this.erosion_max_cells) {
         const available = this.face_cells.filter((c) => !this.erosion_cells.get(this.key(c[0], c[1]))!.eroded)
         if (available.length) {
-          const numNew = Math.min(Math.floor(rnd(1, 3)), available.length, this.erosion_max_cells - erodedCount)
+          const numNew = Math.min(Math.floor(rnd(1, 3) * this.erosion_intensity), available.length, this.erosion_max_cells - erodedCount)
           for (let i = 0; i < numNew; i++) {
             const cell = available.splice(Math.floor(Math.random() * available.length), 1)[0]
             const d = this.erosion_cells.get(this.key(cell[0], cell[1]))!

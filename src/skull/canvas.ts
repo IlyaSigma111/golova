@@ -8,6 +8,22 @@ export interface CanvasCallbacks {
   onFrame?: (bitmap: ImageBitmap) => void
 }
 
+interface Layout {
+  fontSize: number
+  cellW: number
+  cellH: number
+  startX: number
+  startY: number
+  width: number
+  height: number
+  ox: number
+  oy: number
+}
+
+const CHAR_W = 0.505
+const LINE_H = 1.0
+const DENSITY = 1.0
+
 export class SkullCanvas {
   canvas: HTMLCanvasElement
   ctx: CanvasRenderingContext2D
@@ -25,12 +41,15 @@ export class SkullCanvas {
   private dpr = 1
   private frameCounter = 0
   private displayCb: (() => void) | null = null
+  private staticCache: HTMLCanvasElement | null = null
+  private staticDirty = true
 
   constructor(canvas: HTMLCanvasElement, params: SkullParams, cb: CanvasCallbacks = {}) {
     this.canvas = canvas
     this.cb = cb
     this.ctx = canvas.getContext('2d')!
     this.renderer = new SkullRenderer(params)
+    this.applyIntensities(params)
     this.setupResize()
   }
 
@@ -48,6 +67,7 @@ export class SkullCanvas {
     this.canvas.width = Math.floor(w * this.dpr)
     this.canvas.height = Math.floor(h * this.dpr)
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+    this.staticDirty = true
   }
 
   setVideoSource(video: HTMLVideoElement | null) {
@@ -85,6 +105,21 @@ export class SkullCanvas {
   updateParams(params: SkullParams) {
     this.renderer.params = params
     this.renderer.rebuildMask()
+    this.staticDirty = true
+    this.applyIntensities(params)
+  }
+
+  private applyIntensities(params: SkullParams) {
+    const d = params.data
+    this.renderer.setErosionIntensity(d.erosion_intensity)
+    this.effects.setIntensity('visualizer', d.visualizer_intensity)
+    this.effects.setIntensity('particles', d.particles_intensity)
+    this.effects.setIntensity('waves', d.waves_intensity)
+    this.effects.setIntensity('glitch', d.glitch_intensity)
+    this.effects.setIntensity('alarm', d.alarm_intensity)
+    this.effects.setIntensity('terminal', d.terminal_intensity)
+    this.effects.setIntensity('matrix', d.matrix_intensity)
+    this.effects.setIntensity('shatter', d.shatter_intensity)
   }
 
   setEffect(key: keyof EffectToggles, active: boolean) {
@@ -105,6 +140,14 @@ export class SkullCanvas {
 
   setGlitchIntensity(i: number) {
     this.effects.setGlitchIntensity(i)
+  }
+
+  setEffectIntensity(key: string, value: number) {
+    if (key === 'erosion') {
+      this.renderer.setErosionIntensity(value)
+    } else {
+      this.effects.setIntensity(key, value)
+    }
   }
 
   applyScriptToggles(t: EffectToggles) {
@@ -170,9 +213,90 @@ export class SkullCanvas {
     this.renderer.updateFrame()
     this.effects.update(dt, this.canvas.clientWidth || 1920, this.canvas.clientHeight || 1080, this.renderer, this.amplitude)
     if (!this.isPlaying) {
-      // keep mouth closed when idle
       this.renderer.updateFromAudio(false, 0)
     }
+  }
+
+  private layout(): Layout {
+    const width = this.canvas.clientWidth || 1920
+    const height = this.canvas.clientHeight || 1080
+    const r = this.renderer
+    const scale = this.renderer.params.data.head_scale || 1
+    const fitW = width / r.cols
+    const fitH = height / r.rows
+    const fontSize = Math.max(7, Math.floor(Math.min(fitW / CHAR_W, fitH / LINE_H) * DENSITY * scale))
+    const cellW = fontSize * CHAR_W
+    const cellH = fontSize * LINE_H
+    const totalW = r.cols * cellW
+    const totalH = r.rows * cellH
+    const ox = Math.floor(r.offset_x * cellW * 0.1)
+    const oy = Math.floor(r.offset_y * cellH * 0.1)
+    return {
+      fontSize,
+      cellW,
+      cellH,
+      startX: (width - totalW) / 2,
+      startY: (height - totalH) / 2,
+      width,
+      height,
+      ox,
+      oy,
+    }
+  }
+
+  private computeMouth(r: SkullRenderer, mouthArea: Set<string>, mouthNear: Set<string>) {
+    const add = (set: Set<string>, x: number, y: number) => {
+      if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) set.add(`${x},${y}`)
+    }
+    const w = r.mouth_w
+    const cx = r.cx
+    if (r.mouth_open < 0.05) {
+      for (let y = r.mouth_y - 1; y <= r.mouth_y + 1; y++) {
+        for (let x = cx - Math.floor(w / 2); x < cx + Math.floor(w / 2); x++) add(mouthArea, x, y)
+      }
+      for (let y = r.mouth_y - 2; y <= r.mouth_y + 2; y++) {
+        for (let x = cx - Math.floor(w / 2) - 1; x < cx + Math.floor(w / 2) + 1; x++) {
+          if (!mouthArea.has(`${x},${y}`)) add(mouthNear, x, y)
+        }
+      }
+    } else {
+      const openH = Math.floor(r.mouth_open * 2)
+      if (openH > 0) {
+        for (let y = r.mouth_y; y < Math.min(r.rows, r.mouth_y + openH); y++) {
+          const yOff = (y - r.mouth_y) / Math.max(1, openH)
+          const mw = Math.floor(w * (1 - yOff * 0.15))
+          for (let x = cx - Math.floor(mw / 2); x < cx + Math.floor(mw / 2); x++) add(mouthArea, x, y)
+        }
+      }
+    }
+  }
+
+  private buildStaticCache(L: Layout, mouthArea: Set<string>, mouthNear: Set<string>) {
+    const r = this.renderer
+    const off = document.createElement('canvas')
+    const totalW = Math.ceil(r.cols * L.cellW)
+    const totalH = Math.ceil(r.rows * L.cellH)
+    off.width = totalW
+    off.height = totalH
+    const c = off.getContext('2d')!
+    c.font = `${L.fontSize}px Consolas, monospace`
+    c.textAlign = 'center'
+    c.textBaseline = 'top'
+    for (let y = 0; y < r.rows; y++) {
+      for (let x = 0; x < r.cols; x++) {
+        if (!r.mask[y][x]) continue
+        if (r.isEroded(x, y)) continue
+        if (this.effects.isShattered(x, y)) continue
+        if (r.isEye(x, y)) continue
+        if (mouthArea.has(`${x},${y}`) || mouthNear.has(`${x},${y}`)) continue
+        const dist = Math.abs(x - r.cx) / r.cols
+        const b = r.isBorder(x, y) ? 255 : Math.floor(80 + 60 * (1 - dist))
+        c.fillStyle = `rgb(0,${b},0)`
+        c.fillText(r.grid[y][x], x * L.cellW + L.cellW / 2, y * L.cellH)
+      }
+    }
+    this.staticCache = off
+    this.staticDirty = false
   }
 
   private draw() {
@@ -223,90 +347,74 @@ export class SkullCanvas {
 
   private drawSkull(ctx: CanvasRenderingContext2D, width: number, height: number, colorActive: boolean, target: string) {
     const r = this.renderer
-    const cellX = width / r.cols
-    const cellY = height / r.rows
-    const cellSize = Math.min(cellX, cellY) * 0.85
-    const fontSize = Math.max(7, Math.floor(cellSize * 0.85))
+    const L = this.layout()
+    const { fontSize, cellW, cellH, startX, startY, ox, oy } = L
     ctx.font = `${fontSize}px Consolas, monospace`
-    ctx.textBaseline = 'alphabetic'
-    const offsetX = Math.floor(r.offset_x * cellSize / 10)
-    const offsetY = Math.floor(r.offset_y * cellSize / 10)
-    const totalW = r.cols * cellSize
-    const totalH = r.rows * cellSize
-    const startX = (width - totalW) / 2
-    const startY = (height - totalH) / 2
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
 
     const mouthArea = new Set<string>()
     const mouthNear = new Set<string>()
-    if (r.mouth_open < 0.05) {
-      for (let y = r.mouth_y - 1; y <= r.mouth_y + 1; y++) {
-        for (let x = r.cx - Math.floor(r.mouth_w / 2); x < r.cx + Math.floor(r.mouth_w / 2); x++) {
-          if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) mouthArea.add(`${x},${y}`)
-        }
-      }
-      for (let y = r.mouth_y - 2; y <= r.mouth_y + 2; y++) {
-        for (let x = r.cx - Math.floor(r.mouth_w / 2) - 1; x < r.cx + Math.floor(r.mouth_w / 2) + 1; x++) {
-          if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) {
-            if (!mouthArea.has(`${x},${y}`)) mouthNear.add(`${x},${y}`)
+    this.computeMouth(r, mouthArea, mouthNear)
+
+    const drawCell = (x: number, y: number, char: string, color: string) => {
+      ctx.fillStyle = color
+      ctx.fillText(char, startX + ox + x * cellW + cellW / 2, startY + oy + y * cellH)
+    }
+
+    const disruptive = this.colorEffect || r.erosion_active || this.effects.shatter_active
+
+    if (disruptive) {
+      for (let y = 0; y < r.rows; y++) {
+        for (let x = 0; x < r.cols; x++) {
+          if (!r.mask[y][x]) continue
+          if (r.isEroded(x, y)) continue
+          if (this.effects.isShattered(x, y)) continue
+          const char = r.grid[y][x]
+          const isBorder = r.isBorder(x, y)
+          const isMouth = mouthArea.has(`${x},${y}`)
+          const isMouthNear = mouthNear.has(`${x},${y}`)
+          const isEye = r.isEye(x, y)
+          let base: RGB
+          if (isMouth) base = [0, 255, 0]
+          else if (isMouthNear) base = [0, 180, 0]
+          else if (isBorder) base = [0, 255, 0]
+          else if (isEye) base = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 255]
+          else {
+            const dist = Math.abs(x - r.cx) / r.cols
+            const b = Math.floor(80 + 60 * (1 - dist))
+            base = [0, b, 0]
           }
+          if (colorActive) {
+            const rowProgress = y / r.rows
+            if (rowProgress <= r.params.data.color_effect_progress) {
+              const color = r.getColorForCell(x, y, base)
+              drawCell(x, y, char, `rgb(${color[0]},${color[1]},${color[2]})`)
+              continue
+            }
+          }
+          drawCell(x, y, char, `rgb(${base[0]},${base[1]},${base[2]})`)
         }
       }
     } else {
-      const openH = Math.floor(r.mouth_open * 2)
-      if (openH > 0) {
-        for (let y = r.mouth_y; y < Math.min(r.rows, r.mouth_y + openH); y++) {
-          const yOff = (y - r.mouth_y) / Math.max(1, openH)
-          const mw = Math.floor(r.mouth_w * (1 - yOff * 0.15))
-          for (let x = r.cx - Math.floor(mw / 2); x < r.cx + Math.floor(mw / 2); x++) {
-            if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) mouthArea.add(`${x},${y}`)
-          }
-        }
+      if (this.staticDirty || !this.staticCache) {
+        this.buildStaticCache(L, mouthArea, mouthNear)
       }
-    }
-
-    const drawCell = (x: number, y: number, char: string, color: string) => {
-      const px = startX + x * cellSize + cellSize / 2 - fontSize / 3 + offsetX
-      const py = startY + y * cellSize + cellSize / 2 + fontSize / 3 + offsetY
-      ctx.fillStyle = color
-      ctx.fillText(char, px, py)
-    }
-
-    for (let y = 0; y < r.rows; y++) {
-      for (let x = 0; x < r.cols; x++) {
-        if (!r.mask[y][x]) continue
-        if (r.isEroded(x, y)) continue
-        if (this.effects.isShattered(x, y)) continue
-        const char = r.grid[y][x]
-        const isBorder = r.isBorder(x, y)
-        const isMouth = mouthArea.has(`${x},${y}`)
-        const isMouthNear = mouthNear.has(`${x},${y}`)
-        const isEye = r.isEye(x, y)
-        let base: RGB
-        if (isMouth) base = [0, 255, 0]
-        else if (isMouthNear) base = [0, 180, 0]
-        else if (isBorder) base = [0, 255, 0]
-        else if (isEye) base = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 255]
-        else {
-          const dist = Math.abs(x - r.cx) / r.cols
-          const b = Math.floor(80 + 60 * (1 - dist))
-          base = [0, b, 0]
-        }
-        if (colorActive) {
-          const rowProgress = y / r.rows
-          if (rowProgress <= r.params.data.color_effect_progress) {
-            const color = r.getColorForCell(x, y, base)
-            drawCell(x, y, char, `rgb(${color[0]},${color[1]},${color[2]})`)
-            continue
-          }
-        }
-        drawCell(x, y, char, `rgb(${base[0]},${base[1]},${base[2]})`)
+      ctx.drawImage(this.staticCache!, startX + ox, startY + oy)
+      for (const k of mouthArea) {
+        const [x, y] = k.split(',').map(Number)
+        drawCell(x, y, r.grid[y][x], 'rgb(0,255,0)')
+      }
+      for (const k of mouthNear) {
+        const [x, y] = k.split(',').map(Number)
+        drawCell(x, y, r.grid[y][x], 'rgb(0,180,0)')
       }
     }
 
     // falling chars (erosion)
     for (const fc of r.falling_chars) {
-      const px = startX + fc.x * cellSize + cellSize / 2 - fontSize / 3 + offsetX
-      const py = startY + fc.y * cellSize + cellSize / 2 + fontSize / 3 + offsetY
+      const px = startX + ox + fc.x * cellW + cellW / 2
+      const py = startY + oy + fc.y * cellH
       const alpha = Math.floor(255 * fc.alpha)
       let color: RGB = [0, 255, 0]
       if (colorActive) color = r.getColorForCell(Math.floor(fc.x), Math.floor(fc.y), [0, 255, 0])
