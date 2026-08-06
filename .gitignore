@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+*.log
+test-shot.png
+vite-dev.log
+.DS_Store

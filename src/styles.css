@@ -1,0 +1,259 @@
+:root {
+  --bg: #0a0a0a;
+  --bg-2: #0f120f;
+  --panel: #121612;
+  --border: #1f2b1f;
+  --green: #00ff00;
+  --green-dim: #00b300;
+  --green-faint: #0a3a0a;
+  --fg: #b7ffb7;
+  --fg-muted: #4f8f4f;
+  --mono: Consolas, 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+/* ============ ЛЕНДИНГ ============ */
+.landing {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 36px;
+  gap: 22px;
+  background:
+    radial-gradient(1200px 500px at 20% -10%, rgba(0, 255, 0, 0.07), transparent 60%),
+    var(--bg);
+}
+
+.ld-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+
+.ld-logo {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 1px;
+}
+
+.ld-cursor {
+  animation: blink 1s steps(1) infinite;
+}
+
+.ld-sub {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.ld-hero {
+  padding: 10px 0;
+}
+
+.ld-hero h1 {
+  margin: 0 0 10px;
+  font-size: 34px;
+  line-height: 1.15;
+  color: var(--green);
+  text-shadow: 0 0 18px rgba(0, 255, 0, 0.35);
+}
+
+.ld-hero h1 span {
+  color: var(--fg);
+  font-size: 26px;
+}
+
+.ld-desc {
+  color: var(--fg-muted);
+  max-width: 640px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+}
+
+.ld-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn {
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 11px 20px;
+  border: 1px solid var(--green-dim);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--green-faint);
+  box-shadow: 0 0 12px rgba(0, 255, 0, 0.2);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--green);
+  color: #000;
+  font-weight: 700;
+  border-color: var(--green);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #33ff33;
+  box-shadow: 0 0 16px rgba(0, 255, 0, 0.4);
+}
+
+.btn-accent {
+  border-color: #00ffaa;
+  color: #00ffaa;
+}
+
+.btn-accent:hover:not(:disabled) {
+  background: rgba(0, 255, 170, 0.1);
+  box-shadow: 0 0 12px rgba(0, 255, 170, 0.25);
+}
+
+.btn-ghost {
+  border-color: var(--border);
+  color: var(--fg-muted);
+}
+
+.ld-msg {
+  margin-top: 16px;
+  color: var(--green);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  padding: 10px 14px;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.ld-displays h2 {
+  font-size: 15px;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px;
+}
+
+.ld-table {
+  width: 100%;
+  max-width: 720px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ld-table th,
+.ld-table td {
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+}
+
+.ld-table th {
+  color: var(--green);
+  background: var(--panel);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
+}
+
+.ld-table td {
+  color: var(--fg);
+}
+
+.ld-empty {
+  color: var(--fg-muted);
+  padding: 14px 0;
+}
+
+.ld-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+/* ============ ОКНО РЕНДЕРА ============ */
+.viz-root {
+  position: fixed;
+  inset: 0;
+  background: #000;
+}
+
+.viz-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.viz-hud {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.65);
+  border-top: 1px solid rgba(0, 255, 0, 0.3);
+  font-size: 12px;
+  color: var(--green-dim);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  font-family: var(--mono);
+}
+
+.hud-title {
+  color: var(--green);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.hud-display {
+  color: #00ffaa;
+}
+
+.hud-hint {
+  margin-left: auto;
+  color: var(--fg-muted);
+}
