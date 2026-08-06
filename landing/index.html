@@ -65,7 +65,7 @@
   }
   .hero h1 span { color: var(--fg); font-size: 30px; }
   .hero p { max-width: 620px; color: var(--fg-muted); margin: 0 0 28px; }
-  .hero .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .hero .grid { display: grid; grid-template-columns: 1fr 1.35fr; gap: 40px; align-items: center; }
   @media (max-width: 860px) { .hero .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 32px; } }
 
   .buttons { display: flex; flex-wrap: wrap; gap: 14px; }
@@ -300,7 +300,12 @@
 
   function init() {
     model = AVATAR
-    pre.style.fontSize = Math.max(5, Math.min(12, Math.floor(440 / (model.cols * 0.6)))) + 'px'
+    var F = Math.max(4, Math.min(10, Math.floor(600 / Math.max(model.rows, model.cols))))
+    pre.style.fontSize = F + 'px'
+    pre.style.lineHeight = '1'
+    pre.style.width = Math.round(model.cols * F * 0.6 * 1.6) + 'px'
+    pre.style.transform = 'scaleX(1.6)'
+    pre.style.transformOrigin = 'left top'
     var mask = model.grid_char.map(function (row) {
       var rr = []
       for (var x = 0; x < model.cols; x++) rr.push(x < row.length ? row[x] !== ' ' : false)
