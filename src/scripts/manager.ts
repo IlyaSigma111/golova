@@ -65,6 +65,15 @@ export class ScriptManager {
     }
   }
 
+  rename(index: number, name: string): ScriptData | null {
+    const n = (name || '').trim()
+    const script = this.scripts[index]
+    if (!script || !n || n === script.name) return script
+    script.name = n
+    this.save()
+    return script
+  }
+
   duplicate(index: number): ScriptData | null {
     const src = this.scripts[index]
     if (!src) return null

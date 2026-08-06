@@ -1,8 +1,7 @@
 import { SkullRenderer, RGB } from './renderer'
 import { EffectsEngine } from './effects'
 import { SkullParams } from '../skullParams'
-import { COLS, ROWS } from '../headMap'
-import { EffectToggles } from '../types'
+import { EffectToggles, ModelData } from '../types'
 
 export interface CanvasCallbacks {
   onFrame?: (bitmap: ImageBitmap) => void
@@ -20,7 +19,7 @@ interface Layout {
   oy: number
 }
 
-const CHAR_W = 0.505
+const CHAR_W = 1.0
 const LINE_H = 1.0
 const DENSITY = 1.0
 
@@ -107,6 +106,12 @@ export class SkullCanvas {
     this.renderer.rebuildMask()
     this.staticDirty = true
     this.applyIntensities(params)
+  }
+
+  setModel(model: ModelData | null) {
+    if (model) this.renderer.loadModel(model)
+    else this.renderer.clearModel()
+    this.staticDirty = true
   }
 
   private applyIntensities(params: SkullParams) {
@@ -210,10 +215,10 @@ export class SkullCanvas {
   }
 
   private update(dt: number) {
-    this.renderer.updateFrame()
+    this.renderer.updateFrame(dt)
     this.effects.update(dt, this.canvas.clientWidth || 1920, this.canvas.clientHeight || 1080, this.renderer, this.amplitude)
     if (!this.isPlaying) {
-      this.renderer.updateFromAudio(false, 0)
+      this.renderer.updateFromAudio(false, 0, dt)
     }
   }
 
@@ -224,7 +229,8 @@ export class SkullCanvas {
     const scale = this.renderer.params.data.head_scale || 1
     const fitW = width / r.cols
     const fitH = height / r.rows
-    const fontSize = Math.max(7, Math.floor(Math.min(fitW / CHAR_W, fitH / LINE_H) * DENSITY * scale))
+    const fontFloor = r.modelMode && r.cols > 200 ? 1 : 3
+    const fontSize = Math.max(fontFloor, Math.floor(Math.min(fitW / CHAR_W, fitH / LINE_H) * DENSITY * scale))
     const cellW = fontSize * CHAR_W
     const cellH = fontSize * LINE_H
     const totalW = r.cols * cellW
@@ -249,18 +255,19 @@ export class SkullCanvas {
       if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) set.add(`${x},${y}`)
     }
     const w = r.mouth_w
-    const cx = r.cx
+    const cx = r.mouth_cx
     if (r.mouth_open < 0.05) {
-      for (let y = r.mouth_y - 1; y <= r.mouth_y + 1; y++) {
+      const halfH = Math.max(1, Math.floor(r.mouth_h / 2))
+      for (let y = r.mouth_y - halfH; y <= r.mouth_y + halfH; y++) {
         for (let x = cx - Math.floor(w / 2); x < cx + Math.floor(w / 2); x++) add(mouthArea, x, y)
       }
-      for (let y = r.mouth_y - 2; y <= r.mouth_y + 2; y++) {
+      for (let y = r.mouth_y - halfH - 1; y <= r.mouth_y + halfH + 1; y++) {
         for (let x = cx - Math.floor(w / 2) - 1; x < cx + Math.floor(w / 2) + 1; x++) {
           if (!mouthArea.has(`${x},${y}`)) add(mouthNear, x, y)
         }
       }
     } else {
-      const openH = Math.floor(r.mouth_open * 2)
+      const openH = Math.floor(2 + r.mouth_open * 1.5)
       if (openH > 0) {
         for (let y = r.mouth_y; y < Math.min(r.rows, r.mouth_y + openH); y++) {
           const yOff = (y - r.mouth_y) / Math.max(1, openH)
@@ -290,7 +297,12 @@ export class SkullCanvas {
         if (r.isEye(x, y)) continue
         if (mouthArea.has(`${x},${y}`) || mouthNear.has(`${x},${y}`)) continue
         const dist = Math.abs(x - r.cx) / r.cols
-        const b = r.isBorder(x, y) ? 255 : Math.floor(80 + 60 * (1 - dist))
+        let b: number
+        if (r.modelBrightness) {
+          b = Math.max(0, Math.min(255, Math.round(r.modelBrightness[y][x])))
+        } else {
+          b = r.isBorder(x, y) ? 255 : Math.floor(80 + 60 * (1 - dist))
+        }
         c.fillStyle = `rgb(0,${b},0)`
         c.fillText(r.grid[y][x], x * L.cellW + L.cellW / 2, y * L.cellH)
       }
@@ -375,11 +387,14 @@ export class SkullCanvas {
           const isMouth = mouthArea.has(`${x},${y}`)
           const isMouthNear = mouthNear.has(`${x},${y}`)
           const isEye = r.isEye(x, y)
+          if (isMouth) continue
           let base: RGB
-          if (isMouth) base = [0, 255, 0]
-          else if (isMouthNear) base = [0, 180, 0]
-          else if (isBorder) base = [0, 255, 0]
+          if (isMouthNear) base = [0, 150, 0]
           else if (isEye) base = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 255]
+          else if (r.modelBrightness) {
+            const mb = Math.max(0, Math.min(255, Math.round(r.modelBrightness[y][x])))
+            base = [0, mb, 0]
+          } else if (isBorder) base = [0, 255, 0]
           else {
             const dist = Math.abs(x - r.cx) / r.cols
             const b = Math.floor(80 + 60 * (1 - dist))
@@ -397,17 +412,14 @@ export class SkullCanvas {
         }
       }
     } else {
+      if (r.mouth_open > 0.02) this.staticDirty = true
       if (this.staticDirty || !this.staticCache) {
         this.buildStaticCache(L, mouthArea, mouthNear)
       }
       ctx.drawImage(this.staticCache!, startX + ox, startY + oy)
-      for (const k of mouthArea) {
-        const [x, y] = k.split(',').map(Number)
-        drawCell(x, y, r.grid[y][x], 'rgb(0,255,0)')
-      }
       for (const k of mouthNear) {
         const [x, y] = k.split(',').map(Number)
-        drawCell(x, y, r.grid[y][x], 'rgb(0,180,0)')
+        drawCell(x, y, r.grid[y][x], 'rgb(0,150,0)')
       }
     }
 
@@ -425,6 +437,9 @@ export class SkullCanvas {
     // eyebrows
     for (const eb of r.eyebrows) {
       const halfW = Math.floor(eb.width / 2)
+      const ebBase: RGB = [150, 255, 150]
+      const ebColor = colorActive ? r.getColorForCell(eb.x, eb.y, ebBase) : ebBase
+      const ebStyle = `rgb(${ebColor[0]},${ebColor[1]},${ebColor[2]})`
       for (let y = eb.y - Math.floor(eb.height / 2); y <= eb.y + Math.floor(eb.height / 2); y++) {
         for (let x = eb.x - halfW; x <= eb.x; x++) {
           if (x < 0 || x >= r.cols || y < 0 || y >= r.rows) continue
@@ -433,7 +448,7 @@ export class SkullCanvas {
           const offset = Math.floor(eb.left_offset * (1 - (x - (eb.x - halfW)) / Math.max(1, halfW)))
           const drawY = y - offset
           if (drawY < 0 || drawY >= r.rows || !r.mask[drawY][x]) continue
-          drawCell(x, drawY, r.grid[drawY][x], '#00ff00')
+          drawCell(x, drawY, r.grid[drawY][x], ebStyle)
         }
         for (let x = eb.x + 1; x < eb.x + halfW; x++) {
           if (x < 0 || x >= r.cols || y < 0 || y >= r.rows) continue
@@ -442,7 +457,7 @@ export class SkullCanvas {
           const offset = Math.floor(eb.right_offset * (1 - (x - eb.x) / Math.max(1, halfW)))
           const drawY = y - offset
           if (drawY < 0 || drawY >= r.rows || !r.mask[drawY][x]) continue
-          drawCell(x, drawY, r.grid[drawY][x], '#00ff00')
+          drawCell(x, drawY, r.grid[drawY][x], ebStyle)
         }
       }
     }
@@ -467,8 +482,8 @@ export class SkullCanvas {
       }
     }
 
-    // eyes (outline 'O'), skipped while blinking
-    if (r.blink_state < 0.5) {
+    // eyes (outline 'O'), skipped while blinking (parametric only)
+    if (!r.modelMode && r.blink_state < 0.5) {
       for (const eye of r.eye_areas) {
         const halfW = Math.max(2, Math.floor(eye.w / 2))
         const halfH = Math.max(2, Math.floor(eye.h / 2))
@@ -502,6 +517,18 @@ export class SkullCanvas {
               drawCell(x, y, 'O', `rgb(${color[0]},${color[1]},${color[2]})`)
             }
           }
+        }
+      }
+    }
+
+    // model eyes: blink overlay ('=' over eye cells while blinking)
+    if (r.modelMode && r.is_blinking) {
+      const ec = colorActive && target === 'red' ? 'rgba(255,140,0,0.85)' : 'rgba(0,230,200,0.85)'
+      for (let y = 0; y < r.rows; y++) {
+        for (let x = 0; x < r.cols; x++) {
+          if (!r.isEye(x, y)) continue
+          if (r.isEroded(x, y) || this.effects.isShattered(x, y)) continue
+          drawCell(x, y, '=', ec)
         }
       }
     }

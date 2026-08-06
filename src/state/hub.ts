@@ -4,7 +4,8 @@ import { VideoPlayer } from '../video/videoPlayer'
 import { ScriptManager } from '../scripts/manager'
 import { SkullParams } from '../skullParams'
 import { SkullCanvas } from '../skull/canvas'
-import type { EffectToggles, ScriptData, SkullParamsData, StateMsg } from '../types'
+import { parseModel } from '../types'
+import type { EffectToggles, ModelData, ScriptData, SkullParamsData, StateMsg } from '../types'
 
 const anyOnyx = () => (window as unknown as {
   onyx?: {
@@ -60,6 +61,8 @@ class AppHub {
   isPlaying = false
   isAutoPlaying = false
   autoPlayEnabled = true
+  modelActive = false
+  model: ModelData | null = null
 
   onStatus: ((s: string) => void) | null = null
   onScriptsChange: (() => void) | null = null
@@ -165,6 +168,40 @@ class AppHub {
     } catch {
       // ignore
     }
+  }
+
+  // ---------- model (Головастик) ----------
+  async loadModel() {
+    const path = await this.onyx?.openFile({
+      title: 'Загрузить модель «Головастик»',
+      filters: [{ name: 'Model files', extensions: ['json'] }],
+    })
+    if (!path) return false
+    const raw = await (window as unknown as { onyx?: { readText: (p: string) => Promise<string | null> } }).onyx?.readText(path)
+    if (!raw) {
+      this.status('[ERR] Не удалось прочитать файл')
+      return false
+    }
+    const model = parseModel(raw)
+    if (!model) {
+      this.status('[ERR] Ошибка в JSON модели')
+      return false
+    }
+    this.applyModel(model)
+    this.status(`[OK] Модель загружена: ${baseName(path)} (${model.cols}×${model.rows})`)
+    return true
+  }
+
+  clearModel() {
+    this.applyModel(null)
+    this.status('[OK] Параметрический череп')
+  }
+
+  private applyModel(model: ModelData | null) {
+    this.model = model
+    this.modelActive = !!model
+    this.preview?.setModel(model)
+    this.broadcast({ kind: 'model', model })
   }
 
   async loadParams() {

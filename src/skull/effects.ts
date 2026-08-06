@@ -199,6 +199,14 @@ export class EffectsEngine {
     }
   }
 
+  private terminalSize(width: number, height: number) {
+    return Math.max(8, Math.floor(Math.min(width, height) / 72))
+  }
+
+  private terminalStep(width: number, height: number) {
+    return this.terminalSize(width, height) + 4
+  }
+
   private addTerminalLine(width: number, height: number) {
     let text = TERMINAL_SOURCE[Math.floor(Math.random() * TERMINAL_SOURCE.length)]
     const prefixes = ['> ', '$ ', '# ', '>>> ', '... ']
@@ -209,20 +217,22 @@ export class EffectsEngine {
     else if (r < 0.33) text = 'Collecting ' + text.slice(0, 30) + '...'
     else if (r < 0.38) text = 'Successfully installed ' + text.slice(0, 20) + '...'
     const full = prefix + text
+    const size = this.terminalSize(width, height)
+    const step = this.terminalStep(width, height)
     let x = 8
-    let y = 20 + this.terminal_lines.length * 16
-    if (y > height - 30) {
-      for (const line of this.terminal_lines) line.y -= 16
-      y = height - 30
+    let y = step + 4 + this.terminal_lines.length * step
+    if (y > height - 24) {
+      for (const line of this.terminal_lines) line.y -= step
+      y = height - 24
     }
     this.terminal_lines.push({
-      text: full, x, y, size: 8,
+      text: full, x, y, size,
       life: rnd(3, 6), max_life: 3, alpha: 1,
       blink: Math.random() < 0.1, blink_timer: rnd(0, 1), blink_speed: rnd(0.5, 2),
     })
     if (this.terminal_lines.length > this.terminal_max_lines) {
       this.terminal_lines.shift()
-      for (const line of this.terminal_lines) line.y -= 16
+      for (const line of this.terminal_lines) line.y -= step
     }
   }
 
@@ -495,7 +505,7 @@ export class EffectsEngine {
       if (line.life < 0.5) line.alpha = line.life / 0.5
       if (line.life <= 0) {
         this.terminal_lines.splice(i, 1)
-        for (const l of this.terminal_lines) l.y -= 16
+        for (const l of this.terminal_lines) l.y -= this.terminalStep(width, height)
       }
     }
   }
@@ -815,7 +825,8 @@ export class EffectsEngine {
     if (opacity < 0.01) return
     const cellX = width / renderer.cols
     const cellY = height / renderer.rows
-    const cellSize = Math.min(cellX, cellY) * 0.85
+    const scale = renderer.params?.data?.head_scale || 1
+    const cellSize = Math.min(cellX, cellY) * scale * 0.85
     const fontSize = Math.max(7, Math.floor(cellSize * 0.85))
     const totalW = renderer.cols * cellSize
     const totalH = renderer.rows * cellSize

@@ -78,6 +78,7 @@ export function MainPanel() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skullRef = useRef<SkullCanvas | null>(null)
+  const [modelLoaded, setModelLoaded] = useState(false)
 
   const refresh = () => {
     setScripts([...hub.scripts.scripts])
@@ -138,6 +139,20 @@ export function MainPanel() {
     if (ok) setAvatarStatus('Аватар загружен (пользовательский)')
   }
 
+  const loadModelBtn = async () => {
+    const ok = await hub.loadModel()
+    if (ok) {
+      setAvatarStatus('Модель загружена (Головастик)')
+      setModelLoaded(true)
+    }
+  }
+
+  const clearModelBtn = () => {
+    hub.clearModel()
+    setModelLoaded(false)
+    setAvatarStatus('Аватар загружен (default)')
+  }
+
   const newScript = () => setEditor({ script: emptyScript(), isNew: true })
 
   const editScript = () => {
@@ -153,6 +168,17 @@ export function MainPanel() {
     hub.scripts.remove(idx)
     if (hub.currentScript === current) hub.currentScript = hub.scripts.scripts[0] ?? null
     hub.scripts.save()
+    refresh()
+  }
+
+  const renameScript = (script: ScriptData) => {
+    const n = window.prompt('Новое имя сценария', script.name)
+    if (!n || !n.trim() || n.trim() === script.name) return
+    if (hub.scripts.scripts.some((s) => s !== script && s.name === n.trim())) {
+      window.alert(`Сценарий с именем '${n.trim()}' уже существует`)
+      return
+    }
+    hub.scripts.rename(hub.scripts.scripts.findIndex((s) => s === script), n)
     refresh()
   }
 
@@ -275,6 +301,12 @@ export function MainPanel() {
             <button className="btn btn-sm btn-block" onClick={loadAvatar}>
               <Icon name="folderOpen" size={14} /> Загрузить аватар
             </button>
+            <button className="btn btn-sm btn-block" onClick={loadModelBtn}>
+              <Icon name="folderOpen" size={14} /> Загрузить модель (Головастик)
+            </button>
+            <button className="btn btn-sm btn-block" onClick={clearModelBtn} disabled={!modelLoaded}>
+              Сбросить модель
+            </button>
             <div className="avatar-status" style={{ color: avatarStatus.includes('не загружен') ? '#888' : '#00ff00' }}>
               {avatarStatus}
             </div>
@@ -385,6 +417,17 @@ export function MainPanel() {
                 >
                   <Icon name="file" size={12} className="sc-ic" />
                   <span className="sc-name">{s.name}</span>
+                  <button
+                    type="button"
+                    className="sc-rename"
+                    title="Переименовать"
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      renameScript(s)
+                    }}
+                  >
+                    <Icon name="edit" size={11} />
+                  </button>
                   <span className="sc-mark">
                     {playing && s === hub.currentScript ? <Icon name="play" size={11} /> : s === hub.currentScript ? <span className="sc-arrow">◀</span> : null}
                   </span>

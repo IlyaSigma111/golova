@@ -1,7 +1,7 @@
 {
   "name": "golova",
   "productName": "ГОЛОВА",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Avatar Studio — череп-аватар на символьной сетке (Electron + Canvas 2D)",
   "main": "electron/main.js",
   "private": true,

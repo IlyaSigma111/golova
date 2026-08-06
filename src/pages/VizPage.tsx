@@ -9,6 +9,7 @@ export function VizPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skullRef = useRef<SkullCanvas | null>(null)
   const [full, setFull] = useState(false)
+  const [scale, setScale] = useState(1)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -28,12 +29,14 @@ export function VizPage() {
           s.applyScriptToggles(msg.toggles)
           s.setEmotion(msg.emotion)
           s.setAudioData(msg.isPlaying, msg.amplitude)
+          setScale(p.data.head_scale || 1)
           break
         }
         case 'params': {
           const p = SkullParams.fromJson(null)
           p.fromData(msg.data as unknown as Record<string, unknown>)
           s.updateParams(p)
+          setScale(p.data.head_scale || 1)
           break
         }
         case 'audio':
@@ -62,6 +65,9 @@ export function VizPage() {
             v.play().catch(() => {})
             s.setVideoSource(v)
           }
+          break
+        case 'model':
+          s.setModel(msg.model)
           break
       }
     })
@@ -95,6 +101,10 @@ export function VizPage() {
   return (
     <div className="viz-root">
       <canvas ref={canvasRef} className="viz-canvas" />
+      <div className="viz-hud" title="Размер головы (head_scale)">
+        <span className="viz-hud-key">ГОЛОВА</span>
+        <span className="viz-hud-val">{Math.round(scale * 100)}%</span>
+      </div>
     </div>
   )
 }
