@@ -306,17 +306,24 @@ export class SkullRenderer {
     if (!this.eye_areas.length) return
     let left_offset = 0
     let right_offset = 0
+    
+    // Scale factor to make emotions visible and properly spaced on high-res custom models
+    const scale = this.modelMode ? Math.max(1, this.rows / 40) : 1
+    
     if (this.eyebrow_emotion > 0.1) {
-      left_offset = Math.floor(this.eyebrow_emotion * 2)
-      right_offset = Math.floor(this.eyebrow_emotion * 0.5)
+      left_offset = Math.floor(this.eyebrow_emotion * 2 * scale)
+      right_offset = Math.floor(this.eyebrow_emotion * 0.5 * scale)
     } else if (this.eyebrow_emotion < -0.1) {
-      left_offset = Math.floor(this.eyebrow_emotion * 0.5)
-      right_offset = Math.floor(Math.abs(this.eyebrow_emotion) * 2)
+      left_offset = Math.floor(this.eyebrow_emotion * 0.5 * scale)
+      right_offset = Math.floor(Math.abs(this.eyebrow_emotion) * 2 * scale)
     }
+    
+    const gap = Math.max(2, Math.floor(2 * scale))
+    
     for (const eye of this.eye_areas) {
       const eyebrowWidth = Math.floor(eye.w * 1.2)
       const eyebrowHeight = Math.max(1, Math.floor(eye.h * 0.5))
-      const eyebrowY = eye.y - Math.floor(eye.h / 2) - 2
+      const eyebrowY = eye.y - Math.floor(eye.h / 2) - gap
       const isLeft = eye.x < this.cx
       this.eyebrows.push({
         x: eye.x,
@@ -628,7 +635,7 @@ export class SkullRenderer {
 
   private updateBlink(dt: number) {
     const p = this.params.data
-    const interval = Math.max(0.2, p.blink_interval || 3)
+    const baseInterval = Math.max(0.2, p.blink_interval || 3)
     const duration = Math.max(0.03, p.blink_duration || 0.2)
     if (p.blink_enabled === false) {
       this.is_blinking = false
@@ -637,9 +644,15 @@ export class SkullRenderer {
     }
     if (!this.is_blinking) {
       this.blink_timer += dt
-      if (this.blink_timer > interval) {
+      if (this.blink_timer > this.blink_interval) {
         this.is_blinking = true
         this.blink_timer = 0
+        // Естественное моргание: шанс 25% на быстрое двойное моргание, иначе рандом вокруг базы
+        if (this.blink_interval > 0.3 && Math.random() < 0.25) {
+          this.blink_interval = 0.15
+        } else {
+          this.blink_interval = baseInterval * (0.6 + Math.random() * 1.2)
+        }
       }
     } else {
       this.blink_timer += dt
@@ -649,8 +662,9 @@ export class SkullRenderer {
       }
     }
     if (this.is_blinking) {
+      // Плавное открытие/закрытие (синусоида) вместо линейного, глаза не будут "дергаться"
       const progress = this.blink_timer / duration
-      this.blink_state = progress < 0.5 ? progress * 2 : 2 - progress * 2
+      this.blink_state = Math.sin(progress * Math.PI)
     } else {
       this.blink_state = 0
     }
@@ -666,18 +680,14 @@ export class SkullRenderer {
     const p = this.params.data
     const amp = Math.max(0, p.mouth_amp || 1)
     const speedMul = Math.max(0.2, p.mouth_speed || 1)
-    const speed = 0.25 * speedMul
+    // Увеличиваем скорость реакции рта для более точного лип-синка (было 0.25)
+    const speed = 0.45 * speedMul
     if (this.is_playing && this.current_amplitude > 0.005) {
-      this.mouth_timer += dt
-      if (this.mouth_timer > this.mouth_interval) {
-        this.mouth_timer = 0
-        this.mouth_target = (0.3 + Math.random() * 0.7) * amp
-        this.mouth_interval = (0.1 + Math.random() * 0.2) / speedMul
-      }
-      this.target_mouth_open = this.mouth_target
+      // Прямая привязка к громкости звука (с небольшим бустом)
+      // Теперь рот будет открываться на громких звуках и прикрываться на тихих синхронно с аудио
+      this.target_mouth_open = Math.min(1, this.current_amplitude * 3.5 * amp)
     } else {
       this.target_mouth_open = 0
-      this.mouth_timer = 0
     }
     this.mouth_open += (this.target_mouth_open - this.mouth_open) * speed
     const nowOpen = this.mouth_open > 0.02

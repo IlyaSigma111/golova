@@ -322,6 +322,7 @@ export function MainPanel() {
             <Icon name="monitor" size={18} /> Открыть визуализацию
           </button>
 
+          {/* ── 1. Аватар ── */}
           <section className="grp">
             <div className="grp-title"><Icon name="skull" size={14} /> Аватар</div>
             <button className="btn btn-sm btn-block" onClick={loadAvatar}>
@@ -336,7 +337,11 @@ export function MainPanel() {
             <div className="avatar-status" style={{ color: avatarStatus.includes('не загружен') ? '#888' : '#00ff00' }}>
               {avatarStatus}
             </div>
+          </section>
 
+          {/* ── 2. Эффекты лица ── */}
+          <section className="grp">
+            <div className="grp-title"><Icon name="glitch" size={14} /> Эффекты лица</div>
             {FACE_EFFECTS.map((e) => (
               <label key={e.key} className={'fx-cb' + (toggles[e.key] ? ' on' : '')} style={{ '--ac': e.color } as React.CSSProperties}>
                 <input type="checkbox" checked={toggles[e.key]} onChange={(ev) => toggleFx(e.key, ev.target.checked)} />
@@ -344,7 +349,11 @@ export function MainPanel() {
                 <span>{e.label}</span>
               </label>
             ))}
+          </section>
 
+          {/* ── 3. Цвет и Эмоции ── */}
+          <section className="grp">
+            <div className="grp-title"><Icon name="droplet" size={14} /> Цвет и Эмоции</div>
             <div className="fx-label"><Icon name="droplet" size={13} /> Эффекты цвета:</div>
             <div className="color-row">
               <button className="btn btn-sm btn-c-red" title="Красный" onClick={() => hub.setColor('red')}>
@@ -357,8 +366,33 @@ export function MainPanel() {
                 <Icon name="droplet" size={14} />
               </button>
             </div>
+            <div className="grp-divider"></div>
+            <div className="fx-label"><Icon name="neutral" size={13} /> Эмоция:</div>
+            <div className="emotion-row">
+              {EMOTION_BUTTONS.map((e) => (
+                <button
+                  key={e.value}
+                  className={'emotion-btn' + (hub.emotion === e.value ? ' active' : '')}
+                  title={e.label}
+                  onClick={() => {
+                    hub.setEmotion(e.value)
+                    if (current) {
+                      current.emotion = e.value
+                      hub.scripts.save()
+                    }
+                    // Принудительный рендер для подсветки активной кнопки
+                    setToggles({ ...hub.effects })
+                  }}
+                >
+                  <Icon name={e.icon} size={15} />
+                </button>
+              ))}
+            </div>
+          </section>
 
-            <div className="fx-label"><Icon name="visualizer" size={13} /> Эффекты фона:</div>
+          {/* ── 4. Эффекты фона ── */}
+          <section className="grp">
+            <div className="grp-title"><Icon name="visualizer" size={14} /> Эффекты фона</div>
             {BG_EFFECTS.map((e) => (
               <label key={e.key} className={'fx-cb' + (toggles[e.key] ? ' on' : '')}>
                 <input type="checkbox" checked={toggles[e.key]} onChange={(ev) => toggleFx(e.key, ev.target.checked)} />
@@ -366,7 +400,7 @@ export function MainPanel() {
                 <span>{e.label}</span>
               </label>
             ))}
-
+            <div className="grp-divider"></div>
             <div className="fx-label"><Icon name="sliders" size={13} /> Интенсивность эффектов:</div>
             {INTENSITY_LIST.map((item) => (
               <label key={item.key} className="fx-slider">
@@ -388,22 +422,11 @@ export function MainPanel() {
                 </span>
               </label>
             ))}
+          </section>
 
-            <div className="fx-label"><Icon name="neutral" size={13} /> Эмоция:</div>
-            <div className="emotion-row">
-              {EMOTION_BUTTONS.map((e) => (
-                <button
-                  key={e.value}
-                  className={'emotion-btn' + (hub.emotion === e.value ? ' active' : '')}
-                  title={e.label}
-                  onClick={() => hub.setEmotion(e.value)}
-                >
-                  <Icon name={e.icon} size={15} />
-                </button>
-              ))}
-            </div>
-
-            <div className="fx-label"><Icon name="eye" size={13} /> Анимация (глаза/моргание/рот):</div>
+          {/* ── 5. Анимация ── */}
+          <section className="grp">
+            <div className="grp-title"><Icon name="eye" size={14} /> Анимация</div>
 
             <label className="fx-cb">
               <input
