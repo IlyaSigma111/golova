@@ -450,7 +450,8 @@ export class SkullCanvas {
       ctx.fillText(fc.char, px, py)
     }
 
-    // eyebrows
+    // eyebrows (parametric only — model has its own)
+    if (!r.modelMode) {
     for (const eb of r.eyebrows) {
       const halfW = Math.floor(eb.width / 2)
       const ebBase: RGB = [150, 255, 150]
@@ -477,8 +478,10 @@ export class SkullCanvas {
         }
       }
     }
+    }
 
-    // pupils
+    // pupils (parametric only — model has its own eyes)
+    if (!r.modelMode) {
     for (const pupil of r.pupils) {
       const px = Math.round(pupil.x)
       const py = Math.round(pupil.y)
@@ -496,6 +499,7 @@ export class SkullCanvas {
           }
         }
       }
+    }
     }
 
     // eyes (outline 'O'), skipped while blinking (parametric only)
