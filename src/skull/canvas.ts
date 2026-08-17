@@ -537,6 +537,33 @@ export class SkullCanvas {
       }
     }
 
+      // model mouth overlay
+      if (r.modelMode && r.mouth_w > 0) {
+        const mc = colorActive && target === 'red' ? 'rgba(255,140,0,0.9)' : 'rgba(0,255,0,0.95)'
+        const halfW = Math.max(1, Math.floor(r.mouth_w / 2))
+        
+        if (r.mouth_open <= 0.04) {
+          for (let x = r.mouth_cx - halfW; x <= r.mouth_cx + halfW; x++) {
+            if (x >= 0 && x < r.cols) drawCell(x, r.mouth_y, '─', mc)
+          }
+        } else {
+          const rowsCount = Math.max(1, Math.ceil(r.mouth_open * 4)) // spans up to 4 rows
+          for (let dy = 0; dy < rowsCount; dy++) {
+            let glyph = '█'
+            if (dy === rowsCount - 1) {
+              const fraction = (r.mouth_open * 4) - dy
+              if (fraction < 0.3) glyph = '▂'
+              else if (fraction < 0.7) glyph = '▄'
+            }
+            for (let x = r.mouth_cx - halfW; x <= r.mouth_cx + halfW; x++) {
+              if (x >= 0 && x < r.cols && (r.mouth_y + dy) < r.rows) {
+                drawCell(x, r.mouth_y + dy, glyph, mc)
+              }
+            }
+          }
+        }
+      }
+
     // model eyes: blink overlay ('=' over eye cells while blinking)
     if (r.modelMode && r.is_blinking) {
       const ec = colorActive && target === 'red' ? 'rgba(255,140,0,0.85)' : 'rgba(0,230,200,0.85)'
