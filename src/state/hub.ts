@@ -73,12 +73,28 @@ class AppHub {
 
   private lastAmp = 0
 
+  aiQueue: ArrayBuffer[] = []
+  isAiPlaying = false
+
   constructor() {
     this.audio.onAmplitude = (amp) => {
       this.lastAmp = amp
       this.pushAudio(true, amp)
     }
     this.audio.onEnded = () => {
+      if (this.isAiPlaying) {
+        if (this.aiQueue.length > 0) {
+          this.playNextAi()
+        } else {
+          this.isAiPlaying = false
+          this.isPlaying = false
+          if (this.onPlayStateChange) this.onPlayStateChange(false)
+          this.pushAudio(false, 0)
+          this.status('[AI] Ответ завершён')
+        }
+        return
+      }
+
       this.isPlaying = false
       this.isPaused = false
       if (this.onPlayStateChange) this.onPlayStateChange(false)
@@ -89,6 +105,46 @@ class AppHub {
         this.isAutoPlaying = true
         setTimeout(() => this.playNextAuto(), 500)
       }
+    }
+  }
+
+  async playAiAudioQueue() {
+    if (this.isAiPlaying || this.aiQueue.length === 0) return
+    this.isAiPlaying = true
+    this.playNextAi()
+  }
+
+  private async playNextAi() {
+    if (this.aiQueue.length === 0) {
+      this.isAiPlaying = false
+      return
+    }
+    const buf = this.aiQueue.shift()!
+    await this.audio.loadFromArrayBuffer(buf)
+    await this.audio.play()
+    this.isPlaying = true
+    if (this.onPlayStateChange) this.onPlayStateChange(true)
+  }
+
+  async askAi(prompt: string, apiKey: string, updateText: (txt: string) => void) {
+    this.status('[AI] Ожидаю ответа Gemini...')
+    try {
+      // Lazy load AI module
+      const ai = await import('./ai')
+      const res = await ai.askGemini(prompt, apiKey)
+      this.setEmotion(res.emotion)
+      updateText(res.text)
+      this.status(`[AI] Ответ: ${res.text.slice(0, 40)}...`)
+      
+      const sentences = ai.splitSentences(res.text)
+      for (const sentence of sentences) {
+        const buf = await ai.fetchTTS(sentence)
+        this.aiQueue.push(buf)
+      }
+      this.playAiAudioQueue()
+    } catch (e: any) {
+      this.status(`[ERR] ИИ: ${e.message}`)
+      updateText(`Ошибка: ${e.message}`)
     }
   }
 

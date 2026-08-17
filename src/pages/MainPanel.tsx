@@ -84,6 +84,11 @@ export function MainPanel() {
     mouth_speed: 1,
   })
 
+  const [aiApiKey, setAiApiKey] = useState(localStorage.getItem('gemini_api_key') || '')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResponseText, setAiResponseText] = useState('')
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skullRef = useRef<SkullCanvas | null>(null)
   const [modelLoaded, setModelLoaded] = useState(false)
@@ -538,6 +543,55 @@ export function MainPanel() {
               />
               <span className="fx-slider-val">{(anim.mouth_speed as number).toFixed(1)}×</span>
             </label>
+          </section>
+
+          {/* ── 6. ИИ Режим ── */}
+          <section className="grp">
+            <div className="grp-title"><Icon name="terminal" size={14} /> ИИ Режим (Gemini)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0 4px', marginBottom: '4px' }}>
+              <input
+                type="password"
+                placeholder="Gemini API Key"
+                value={aiApiKey}
+                onChange={(e) => {
+                  setAiApiKey(e.target.value)
+                  localStorage.setItem('gemini_api_key', e.target.value)
+                }}
+                style={{ fontSize: '11px', padding: '4px 6px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(52, 224, 122, 0.5)', color: '#fff', borderRadius: '4px' }}
+              />
+              <textarea
+                placeholder="Что скажешь, Голова?"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                style={{ fontSize: '12px', padding: '6px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(52, 224, 122, 0.5)', color: '#fff', borderRadius: '4px', resize: 'vertical', minHeight: '50px' }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (!aiLoading && aiPrompt.trim()) {
+                      setAiLoading(true)
+                      hub.askAi(aiPrompt, aiApiKey, setAiResponseText).finally(() => setAiLoading(false))
+                      setAiPrompt('')
+                    }
+                  }
+                }}
+              />
+              <button
+                className="btn btn-sm btn-block"
+                disabled={aiLoading || !aiPrompt.trim()}
+                onClick={() => {
+                  setAiLoading(true)
+                  hub.askAi(aiPrompt, aiApiKey, setAiResponseText).finally(() => setAiLoading(false))
+                  setAiPrompt('')
+                }}
+              >
+                {aiLoading ? 'Думает...' : 'Спросить (Enter)'}
+              </button>
+              {aiResponseText && (
+                <div style={{ fontSize: '11px', color: '#88e0a0', marginTop: '4px', lineHeight: '1.3', maxHeight: '120px', overflowY: 'auto', padding: '4px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
+                  {aiResponseText}
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="grp grp-status">
