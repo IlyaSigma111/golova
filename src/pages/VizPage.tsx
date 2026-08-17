@@ -8,6 +8,7 @@ const onyx = (window as unknown as { onyx: any }).onyx
 export function VizPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skullRef = useRef<SkullCanvas | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
   const [full, setFull] = useState(false)
   const [scale, setScale] = useState(1)
 
@@ -51,11 +52,22 @@ export function VizPage() {
         case 'color':
           s.setColorEffect(msg.color)
           break
+        case 'pause':
+          if (videoRef.current) {
+            if (msg.paused) videoRef.current.pause()
+            else videoRef.current.play().catch(() => {})
+          }
+          break
         case 'resetMouth':
           s.resetMouth()
           break
         case 'video':
           s.clearVideo()
+          if (videoRef.current) {
+            videoRef.current.pause()
+            videoRef.current.src = ''
+            videoRef.current = null
+          }
           if (msg.playing && msg.path) {
             const v = document.createElement('video')
             v.src = 'file:///' + msg.path.replace(/\\/g, '/')
@@ -63,6 +75,7 @@ export function VizPage() {
             v.autoplay = true
             v.loop = true
             v.play().catch(() => {})
+            videoRef.current = v
             s.setVideoSource(v)
           }
           break
@@ -71,6 +84,8 @@ export function VizPage() {
           break
       }
     })
+
+    onyx.childReady()
 
     return () => {
       offState()

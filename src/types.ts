@@ -22,8 +22,8 @@ export interface SkullParamsData {
   color_effect: boolean
   color_effect_progress: number
   color_effect_active: boolean
-  color_effect_target: 'red' | 'white' | 'reset'
-  previous_color: 'red' | 'white'
+  color_effect_target: 'red' | 'white' | 'green'
+  previous_color: 'red' | 'white' | 'green'
   head_scale: number
   visualizer_intensity: number
   particles_intensity: number
@@ -34,6 +34,13 @@ export interface SkullParamsData {
   matrix_intensity: number
   shatter_intensity: number
   erosion_intensity: number
+  blink_enabled: boolean
+  blink_interval: number
+  blink_duration: number
+  pupil_size: number
+  pupil_move: boolean
+  mouth_amp: number
+  mouth_speed: number
 }
 
 export interface ScriptData {
@@ -72,6 +79,7 @@ export interface ModelData {
   grid_char: string[][]
   grid_brightness: number[][]
   is_eye: boolean[][]
+  is_mouth: boolean[][]
 }
 
 export function parseModel(text: string): ModelData | null {
@@ -83,26 +91,31 @@ export function parseModel(text: string): ModelData | null {
     const g = d.grid_char as unknown
     const b = d.grid_brightness as unknown
     const e = d.is_eye as unknown
+    const m = d.is_mouth as unknown
     if (!Array.isArray(g) || g.length !== rows || !Array.isArray(g[0]) || (g[0] as unknown[]).length !== cols) return null
     const grid_char: string[][] = []
     const grid_brightness: number[][] = []
     const is_eye: boolean[][] = []
+    const is_mouth: boolean[][] = []
     for (let y = 0; y < rows; y++) {
       const gr: string[] = []
       const br: number[] = []
       const ey: boolean[] = []
+      const mo: boolean[] = []
       for (let x = 0; x < cols; x++) {
         const c = (g[y] as unknown[])[x]
         gr.push(typeof c === 'string' && (c as string).length > 0 ? (c as string)[0] : ' ')
         const bb = b && Array.isArray(b) && Array.isArray((b as unknown[][])[y]) ? Number(((b as unknown[][])[y] as unknown[])[x]) : 255
         br.push(Number.isFinite(bb) ? Math.max(0, Math.min(255, Math.round(bb))) : 255)
         ey.push(!!(e && Array.isArray(e) && e[y] && (e[y] as unknown[])[x]))
+        mo.push(!!(m && Array.isArray(m) && m[y] && (m[y] as unknown[])[x]))
       }
       grid_char.push(gr)
       grid_brightness.push(br)
       is_eye.push(ey)
+      is_mouth.push(mo)
     }
-    return { rows, cols, grid_char, grid_brightness, is_eye, mode: d.mode === 'face' ? 'face' : 'free' }
+    return { rows, cols, grid_char, grid_brightness, is_eye, is_mouth, mode: d.mode === 'face' ? 'face' : 'free' }
   } catch {
     return null
   }
@@ -115,6 +128,7 @@ export type StateMsg =
   | { kind: 'emotion'; emotion: number }
   | { kind: 'effects'; toggles: EffectToggles }
   | { kind: 'color'; color: 'red' | 'white' | 'reset' }
+  | { kind: 'pause'; paused: boolean }
   | { kind: 'resetMouth' }
   | { kind: 'video'; playing: boolean; path: string | null }
   | { kind: 'model'; model: ModelData | null }

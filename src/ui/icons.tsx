@@ -6,7 +6,7 @@ export type IconName =
   | 'edit' | 'plus' | 'save' | 'folderOpen' | 'skull' | 'glitch' | 'alarm'
   | 'terminal' | 'matrix' | 'shatter' | 'visualizer' | 'particles' | 'waves'
   | 'droplet' | 'reset' | 'music' | 'volume' | 'close' | 'check' | 'video'
-  | 'file' | 'smile' | 'neutral' | 'angry' | 'clock' | 'sliders'
+  | 'file' | 'smile' | 'neutral' | 'angry' | 'clock' | 'sliders' | 'eye'
 
 const P: Record<IconName, React.ReactNode> = {
   monitor: (<><rect x="2" y="4" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 18v3" /></>),
@@ -47,6 +47,7 @@ const P: Record<IconName, React.ReactNode> = {
   neutral: (<><circle cx="12" cy="12" r="9" /><path d="M8 15h8" /><path d="M9 10h.01" /><path d="M15 10h.01" /></>),
   angry: (<><circle cx="12" cy="12" r="9" /><path d="M8.5 7.5l-2 2" /><path d="M15.5 7.5l2 2" /><path d="M8 15h8" /></>),
   clock: (<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
+  eye: (<><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>),
 }
 
 export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }) {

@@ -24,8 +24,8 @@ const DEFAULTS: SkullParamsData = {
   color_effect: false,
   color_effect_progress: 0.0,
   color_effect_active: false,
-  color_effect_target: 'red',
-  previous_color: 'red',
+  color_effect_target: 'green',
+  previous_color: 'green',
   head_scale: 1.0,
   visualizer_intensity: 1.0,
   particles_intensity: 1.0,
@@ -36,6 +36,13 @@ const DEFAULTS: SkullParamsData = {
   matrix_intensity: 1.0,
   shatter_intensity: 1.0,
   erosion_intensity: 1.0,
+  blink_enabled: true,
+  blink_interval: 3.0,
+  blink_duration: 0.2,
+  pupil_size: 1.0,
+  pupil_move: true,
+  mouth_amp: 1.0,
+  mouth_speed: 1.0,
 }
 
 export class SkullParams {

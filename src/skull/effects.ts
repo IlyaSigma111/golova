@@ -63,7 +63,7 @@ function colorForEffect(target: string, g: number): RGB {
 }
 
 export class EffectsEngine {
-  fade_speed = 0.04
+  fade_speed = 1.3
   intensity: Record<string, number> = {
     visualizer: 1,
     particles: 1,
@@ -109,30 +109,26 @@ export class EffectsEngine {
   glitch_noise: GlitchNoise[] = []
 
   alarm_active = false
-  alarm_target = 0
   alarm_current = 0
   alarm_items: AlarmItem[] = []
   alarm_timer = 0
 
   terminal_active = false
-  terminal_target = 0
   terminal_current = 0
   terminal_lines: TerminalLine[] = []
   terminal_timer = 0
   terminal_max_lines = 20
 
   matrix_active = false
-  matrix_target = 0
   matrix_current = 0
   matrix_drops: MatrixDrop[] = []
   matrix_timer = 0
 
   shatter_active = false
-  shatter_target = 0
   shatter_current = 0
   shatter_cells: Map<string, ShatterCell> = new Map()
   shatter_timer = 0
-  shatter_interval = 0.08
+  shatter_interval = 0.18
   shatter_falling_chars: ShatterFallingChar[] = []
   face_cells: Array<[number, number]> = []
 
@@ -146,8 +142,9 @@ export class EffectsEngine {
   setWaves(active: boolean) { this.waves_target = active ? 1 : 0 }
 
   toggleGlitch(active: boolean, width = 1920, height = 1080) {
-    this.glitch_target_intensity = active ? this.intensity.glitch : 0
+    if (active === this.glitch_active) return
     this.glitch_active = active
+    this.glitch_target_intensity = active ? this.intensity.glitch : 0
     if (active && !this.glitch_lines.length) {
       for (let i = 0; i < 5; i++) {
         this.glitch_lines.push({
@@ -160,13 +157,11 @@ export class EffectsEngine {
   setGlitchIntensity(i: number) { this.glitch_target_intensity = Math.max(0, Math.min(1, i)) }
 
   toggleAlarm(active: boolean, width = 1920, height = 1080) {
-    this.alarm_target = active ? 1 : 0
+    if (active === this.alarm_active) return
     this.alarm_active = active
     if (active) {
       this.alarm_timer = 0
       for (let i = 0; i < 8; i++) this.addAlarmItem(width, height)
-    } else {
-      this.alarm_items = []
     }
   }
 
@@ -188,23 +183,21 @@ export class EffectsEngine {
   }
 
   toggleTerminal(active: boolean, width = 1920, height = 1080) {
-    this.terminal_target = active ? 1 : 0
+    if (active === this.terminal_active) return
     this.terminal_active = active
     if (active) {
       this.terminal_timer = 0
       this.terminal_lines = []
       for (let i = 0; i < 8; i++) this.addTerminalLine(width, height)
-    } else {
-      this.terminal_lines = []
     }
   }
 
   private terminalSize(width: number, height: number) {
-    return Math.max(8, Math.floor(Math.min(width, height) / 72))
+    return Math.max(11, Math.floor(Math.min(width, height) / 50))
   }
 
   private terminalStep(width: number, height: number) {
-    return this.terminalSize(width, height) + 4
+    return this.terminalSize(width, height) + 5
   }
 
   private addTerminalLine(width: number, height: number) {
@@ -219,11 +212,11 @@ export class EffectsEngine {
     const full = prefix + text
     const size = this.terminalSize(width, height)
     const step = this.terminalStep(width, height)
-    let x = 8
-    let y = step + 4 + this.terminal_lines.length * step
-    if (y > height - 24) {
+    let x = Math.max(10, Math.floor(width * 0.18))
+    let y = Math.floor(height * 0.3) + this.terminal_lines.length * step
+    if (y > height - 48) {
       for (const line of this.terminal_lines) line.y -= step
-      y = height - 24
+      y = height - 48
     }
     this.terminal_lines.push({
       text: full, x, y, size,
@@ -250,7 +243,7 @@ export class EffectsEngine {
   }
 
   toggleMatrix(active: boolean, width = 1920, height = 1080) {
-    this.matrix_target = active ? 1 : 0
+    if (active === this.matrix_active) return
     this.matrix_active = active
     if (active) {
       this.matrix_timer = 0
@@ -259,15 +252,12 @@ export class EffectsEngine {
   }
 
   toggleShatter(active: boolean, renderer: SkullRenderer | null) {
-    this.shatter_target = active ? 1 : 0
+    if (active === this.shatter_active) return
     this.shatter_active = active
     if (active) {
       this.shatter_timer = 0
       this.shatter_falling_chars = []
       this.initShatterState(renderer)
-    } else {
-      this.shatter_cells = new Map()
-      this.shatter_falling_chars = []
     }
   }
 
@@ -305,7 +295,7 @@ export class EffectsEngine {
     const char = renderer.grid[y][x]
     this.shatter_falling_chars.push({
       x, y, char, start_x: x, start_y: y,
-      speed_y: 0.8 + Math.random() * 1.5, speed_x: rnd(-0.5, 0.5),
+      speed_y: 0.3 + Math.random() * 0.5, speed_x: rnd(-0.3, 0.3),
       alpha: 1, life: 0, max_life: rnd(1, 2.5),
     })
   }
@@ -345,28 +335,26 @@ export class EffectsEngine {
         this.visualizer_data[i] = Math.min(1, base + Math.random() * amplitude * 0.2)
       }
     } else {
-      for (let i = 0; i < this.visualizer_bars; i++) this.visualizer_data[i] *= 0.9
+      for (let i = 0; i < this.visualizer_bars; i++) this.visualizer_data[i] *= 0.96
     }
-    this.visualizer_timer += 0.015
+    this.visualizer_timer += 0.01
   }
 
-  updateFades() {
-    this.waves_current = this.step(this.waves_current, this.waves_target)
-    this.code_particles_current = this.step(this.code_particles_current, this.code_particles_target)
-    this.visualizer_current = this.step(this.visualizer_current, this.visualizer_target)
+  updateFades(dt: number) {
+    this.waves_current = this.step(this.waves_current, this.waves_target, dt)
+    this.code_particles_current = this.step(this.code_particles_current, this.code_particles_target, dt)
+    this.visualizer_current = this.step(this.visualizer_current, this.visualizer_target, dt)
   }
 
-  private step(cur: number, target: number): number {
-    if (Math.abs(cur - target) > 0.001) {
-      return cur < target
-        ? Math.min(target, cur + this.fade_speed)
-        : Math.max(target, cur - this.fade_speed)
-    }
-    return target
+  private step(cur: number, target: number, dt: number, rate = this.fade_speed): number {
+    if (Math.abs(cur - target) < 0.001) return target
+    const delta = rate * dt
+    if (Math.abs(cur - target) <= delta) return target
+    return cur < target ? cur + delta : cur - delta
   }
 
   update(dt: number, width: number, height: number, renderer: SkullRenderer | null, amplitude: number) {
-    this.updateFades()
+    this.updateFades(dt)
 
     if (this.code_particles_active && this.code_particles_current > 0.01) {
       this._particle_frame_counter++
@@ -414,7 +402,7 @@ export class EffectsEngine {
 
   private updateGlitch(dt: number, width: number, height: number) {
     if (Math.abs(this.glitch_current_intensity - this.glitch_target_intensity) > 0.001) {
-      this.glitch_current_intensity = this.step(this.glitch_current_intensity, this.glitch_target_intensity)
+      this.glitch_current_intensity = this.step(this.glitch_current_intensity, this.glitch_target_intensity, dt, 1.2)
     } else {
       this.glitch_current_intensity = this.glitch_target_intensity
     }
@@ -461,48 +449,52 @@ export class EffectsEngine {
   }
 
   private updateAlarm(dt: number, width: number, height: number) {
-    if (!this.alarm_active) {
-      if (this.alarm_current > 0) this.alarm_current = Math.max(0, this.alarm_current - this.fade_speed)
+    this.alarm_current = this.step(this.alarm_current, this.alarm_active ? 0.7 : 0, dt)
+    if (this.alarm_current < 0.005) {
+      this.alarm_items = []
       return
     }
-    this.alarm_current = Math.min(0.7, this.alarm_current + this.fade_speed)
-    this.alarm_timer += dt
-    if (this.alarm_timer > 0.25) {
-      this.alarm_timer = 0
-      if (this.alarm_items.length < 25) {
-        this.addAlarmItem(width, height)
-        if (Math.random() < 0.3) this.addAlarmItem(width, height)
+    if (this.alarm_active) {
+      this.alarm_timer += dt
+      if (this.alarm_timer > 0.25) {
+        this.alarm_timer = 0
+        if (this.alarm_items.length < 25) {
+          this.addAlarmItem(width, height)
+          if (Math.random() < 0.3) this.addAlarmItem(width, height)
+        }
       }
     }
     for (let i = this.alarm_items.length - 1; i >= 0; i--) {
       const item = this.alarm_items[i]
       item.life -= dt
       item.pulse += dt * item.pulse_speed
-      if (item.life < 0.3) item.alpha = item.life / 0.3
+      if (item.life < 0.3) item.alpha = Math.max(0, item.life / 0.3)
       item.scale = 1 + 0.1 * Math.sin(item.pulse)
       if (item.life <= 0) this.alarm_items.splice(i, 1)
     }
   }
 
   private updateTerminal(dt: number, width: number, height: number) {
-    if (!this.terminal_active) {
-      if (this.terminal_current > 0) this.terminal_current = Math.max(0, this.terminal_current - this.fade_speed)
+    this.terminal_current = this.step(this.terminal_current, this.terminal_active ? 1 : 0, dt)
+    if (this.terminal_current < 0.005) {
+      this.terminal_lines = []
       return
     }
-    this.terminal_current = Math.min(1, this.terminal_current + this.fade_speed)
-    this.terminal_timer += dt
-    if (this.terminal_timer > 0.4) {
-      this.terminal_timer = 0
-      if (this.terminal_lines.length < this.terminal_max_lines) {
-        this.addTerminalLine(width, height)
-        if (Math.random() < 0.2) this.addTerminalLine(width, height)
+    if (this.terminal_active) {
+      this.terminal_timer += dt
+      if (this.terminal_timer > 0.4) {
+        this.terminal_timer = 0
+        if (this.terminal_lines.length < this.terminal_max_lines) {
+          this.addTerminalLine(width, height)
+          if (Math.random() < 0.2) this.addTerminalLine(width, height)
+        }
       }
     }
     for (let i = this.terminal_lines.length - 1; i >= 0; i--) {
       const line = this.terminal_lines[i]
       line.life -= dt
       line.blink_timer += dt * line.blink_speed
-      if (line.life < 0.5) line.alpha = line.life / 0.5
+      if (line.life < 0.5) line.alpha = Math.max(0, line.life / 0.5)
       if (line.life <= 0) {
         this.terminal_lines.splice(i, 1)
         for (const l of this.terminal_lines) l.y -= this.terminalStep(width, height)
@@ -511,11 +503,12 @@ export class EffectsEngine {
   }
 
   private updateMatrix(dt: number, width: number, height: number) {
-    if (!this.matrix_active) {
-      if (this.matrix_current > 0) this.matrix_current = Math.max(0, this.matrix_current - this.fade_speed)
+    this.matrix_current = this.step(this.matrix_current, this.matrix_active ? 1 : 0, dt)
+    if (this.matrix_current < 0.005) {
+      this.matrix_drops = []
       return
     }
-    this.matrix_current = Math.min(1, this.matrix_current + this.fade_speed)
+    if (!this.matrix_active || !this.matrix_drops.length) return
     this.matrix_timer += dt
     for (const drop of this.matrix_drops) {
       drop.y += drop.speed
@@ -538,12 +531,13 @@ export class EffectsEngine {
   }
 
   private updateShatter(dt: number, width: number, height: number, renderer: SkullRenderer | null) {
-    if (!this.shatter_active) {
-      if (this.shatter_current > 0) this.shatter_current = Math.max(0, this.shatter_current - this.fade_speed)
+    this.shatter_current = this.step(this.shatter_current, this.shatter_active ? 1 : 0, dt)
+    if (this.shatter_current < 0.005) {
+      this.shatter_cells = new Map()
+      this.shatter_falling_chars = []
       return
     }
-    this.shatter_current = Math.min(1, this.shatter_current + this.fade_speed)
-    if (!renderer || !this.face_cells.length) return
+    if (!this.shatter_active || !renderer || !this.face_cells.length) return
     this.shatter_timer += dt
     let erodedCount = 0
     for (const d of this.shatter_cells.values()) if (d.eroded) erodedCount++
@@ -576,15 +570,15 @@ export class EffectsEngine {
   // ===== DRAWING =====
 
   drawBackgroundEffects(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
-    this.drawVisualizer(ctx, width, height)
+    this.drawVisualizer(ctx, width, height, colorEffect, target)
     this.drawWaves(ctx, width, height, 0, colorEffect, target)
     this.drawCodeParticles(ctx, width, height, colorEffect, target)
     this.drawTerminal(ctx, width, height, colorEffect, target)
     this.drawMatrix(ctx, width, height, colorEffect, target)
   }
 
-  drawVisualizerPublic(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    this.drawVisualizer(ctx, width, height)
+  drawVisualizerPublic(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
+    this.drawVisualizer(ctx, width, height, colorEffect, target)
   }
 
   drawForeground(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
@@ -592,18 +586,18 @@ export class EffectsEngine {
     this.drawGlitch(ctx, width, height)
   }
 
-  private getVisualizerColor(value: number, colorEffect: boolean, target: string): string {
+  private getVisualizerColor(value: number, colorEffect: boolean, target: string, alpha = 200): string {
     if (colorEffect) {
-      if (target === 'red') return `rgba(${Math.floor(200 + 55 * value)},${Math.floor(50 * (1 - value))},${Math.floor(50 * (1 - value))},200)`
+      if (target === 'red') return `rgba(${Math.floor(200 + 55 * value)},${Math.floor(50 * (1 - value))},${Math.floor(50 * (1 - value))},${alpha})`
       if (target === 'white') {
         const b = Math.floor(150 + 105 * value)
-        return `rgba(${b},${b},${b},200)`
+        return `rgba(${b},${b},${b},${alpha})`
       }
     }
-    return `rgba(0,${Math.floor(150 + 105 * value)},0,200)`
+    return `rgba(0,${Math.floor(150 + 105 * value)},0,${alpha})`
   }
 
-  private drawVisualizer(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  private drawVisualizer(ctx: CanvasRenderingContext2D, width: number, height: number, colorEffect: boolean, target: string) {
     if (this.visualizer_current < 0.01) return
     const opacity = this.visualizer_current * this.intensity.visualizer
     if (opacity < 0.01) return
@@ -620,7 +614,7 @@ export class EffectsEngine {
       const barH = value * maxHeight
       const x = Math.floor(i * (barWidth + gap) + gap / 2)
       const y = Math.floor(centerY - barH)
-      ctx.fillStyle = `rgba(0,${Math.floor(150 + 105 * value)},0,${opacity * 0.8})`
+      ctx.fillStyle = this.getVisualizerColor(value, colorEffect, target, Math.floor(opacity * 0.8))
       ctx.fillRect(x, y, Math.floor(barWidth), Math.floor(barH))
     }
   }
@@ -819,7 +813,7 @@ export class EffectsEngine {
     }
   }
 
-  drawShatterFallingChars(ctx: CanvasRenderingContext2D, width: number, height: number, renderer: SkullRenderer) {
+  drawShatterFallingChars(ctx: CanvasRenderingContext2D, width: number, height: number, renderer: SkullRenderer, colorEffect: boolean, target: string) {
     if (!this.shatter_falling_chars.length) return
     const opacity = this.shatter_current * this.intensity.shatter
     if (opacity < 0.01) return
@@ -832,13 +826,14 @@ export class EffectsEngine {
     const totalH = renderer.rows * cellSize
     const startX = (width - totalW) / 2
     const startY = (height - totalH) / 2
+    const [r, g, b] = colorEffect ? colorForEffect(target, 255) : [0, 255, 0]
     ctx.font = `${fontSize}px Consolas, monospace`
     ctx.textBaseline = 'alphabetic'
     for (const fc of this.shatter_falling_chars) {
       const px = startX + fc.x * cellSize + cellSize / 2 - fontSize / 3
       const py = startY + fc.y * cellSize + cellSize / 2 + fontSize / 3
       const alpha = Math.floor(255 * fc.alpha * opacity)
-      ctx.fillStyle = `rgba(0,255,0,${alpha})`
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`
       ctx.fillText(fc.char, px, py)
     }
   }

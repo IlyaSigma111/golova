@@ -59,6 +59,7 @@ class AppHub {
   preview: SkullCanvas | null = null
   currentScript: ScriptData | null = null
   isPlaying = false
+  isPaused = false
   isAutoPlaying = false
   autoPlayEnabled = true
   modelActive = false
@@ -78,8 +79,10 @@ class AppHub {
     }
     this.audio.onEnded = () => {
       this.isPlaying = false
+      this.isPaused = false
       if (this.onPlayStateChange) this.onPlayStateChange(false)
       this.status('[OK] Воспроизведение завершено')
+      this.resetEffects()
       this.pushAudio(false, 0)
       if (this.autoPlayEnabled && !this.isAutoPlaying && this.scripts.scripts.length > 1) {
         this.isAutoPlaying = true
@@ -214,6 +217,33 @@ class AppHub {
   }
 
   // ---------- effects ----------
+  resetEffects() {
+    const off: EffectToggles = {
+      visualizer: false, particles: false, waves: false,
+      glitch: false, alarm: false, terminal: false,
+      matrix: false, shatter: false, erosion: false,
+    }
+    this.effects = off
+    this.preview?.applyScriptToggles(off)
+    this.broadcast({ kind: 'effects', toggles: off })
+    this.setColor('reset')
+  }
+
+  togglePause() {
+    if (this.isPaused) {
+      this.audio.resume()
+      if (this.video.pathStr) this.video.resume()
+      this.isPaused = false
+      this.status('[PLAY] Продолжено')
+    } else if (this.isPlaying) {
+      this.audio.pause()
+      if (this.video.pathStr) this.video.pause()
+      this.isPaused = true
+      this.status('[PAUSE] Пауза сценария')
+    }
+    this.broadcast({ kind: 'pause', paused: this.isPaused })
+  }
+
   setEffect(key: keyof EffectToggles, active: boolean) {
     this.effects[key] = active
     this.preview?.setEffect(key, active)
@@ -249,6 +279,14 @@ class AppHub {
     this.broadcast({ kind: 'params', data: this.params.toData() })
   }
 
+  setAnimParam(key: 'blink_enabled' | 'blink_interval' | 'blink_duration' | 'pupil_size' | 'pupil_move' | 'mouth_amp' | 'mouth_speed', value: number | boolean) {
+    ;(this.params.data as unknown as Record<string, unknown>)[key] = value
+    this.paramsSave()
+    this.preview?.updateParams(this.params)
+    this.broadcast({ kind: 'params', data: this.params.toData() })
+    if (this.onParamsChange) this.onParamsChange()
+  }
+
   resetMouth() {
     this.preview?.resetMouth()
     this.broadcast({ kind: 'resetMouth' })
@@ -268,6 +306,7 @@ class AppHub {
       return
     }
     this.currentScript = script
+    this.isPaused = false
     this.applyScriptEffects(script)
     this.setEmotion(script.emotion)
 
@@ -316,12 +355,14 @@ class AppHub {
   stopScript() {
     this.audio.stop()
     this.isPlaying = false
+    this.isPaused = false
     this.isAutoPlaying = false
     if (this.onPlayStateChange) this.onPlayStateChange(false)
     this.video.stop()
     this.preview?.clearVideo()
     this.broadcast({ kind: 'video', playing: false, path: null })
     this.status(this.currentScript ? `[STOP] Остановлен: ${this.currentScript.name}` : '[STOP] Остановлено')
+    this.resetEffects()
     this.resetMouth()
     if (this.onScriptsChange) this.onScriptsChange()
   }

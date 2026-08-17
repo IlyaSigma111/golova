@@ -30,15 +30,13 @@ const BG_EFFECTS: Array<{ key: keyof EffectToggles; icon: IconName; label: strin
 ]
 
 const INTENSITY_LIST: Array<{ key: string; label: string }> = [
-  { key: 'erosion', label: 'Эрозия' },
   { key: 'glitch', label: 'Помехи' },
-  { key: 'alarm', label: 'Тревога' },
-  { key: 'terminal', label: 'Терминал' },
-  { key: 'matrix', label: 'Матрица' },
-  { key: 'shatter', label: 'Рассыпание' },
-  { key: 'visualizer', label: 'Визуализатор' },
-  { key: 'particles', label: 'Символы кода' },
-  { key: 'waves', label: 'Волны' },
+]
+
+const EMOTION_BUTTONS: Array<{ value: number; icon: IconName; label: string }> = [
+  { value: 1, icon: 'smile', label: 'Доброта' },
+  { value: 0, icon: 'neutral', label: 'Нейтрально' },
+  { value: -1, icon: 'angry', label: 'Злость' },
 ]
 
 function emptyScript(): ScriptData {
@@ -75,6 +73,16 @@ export function MainPanel() {
   const [editor, setEditor] = useState<{ script: ScriptData; isNew: boolean } | null>(null)
   const [headScale, setHeadScale] = useState(1)
   const [fxIntensity, setFxIntensity] = useState<Record<string, number>>({})
+  const [paused, setPaused] = useState(false)
+  const [anim, setAnim] = useState<Record<string, number | boolean>>({
+    blink_enabled: true,
+    blink_interval: 3,
+    blink_duration: 0.2,
+    pupil_size: 1,
+    pupil_move: true,
+    mouth_amp: 1,
+    mouth_speed: 1,
+  })
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skullRef = useRef<SkullCanvas | null>(null)
@@ -87,12 +95,22 @@ export function MainPanel() {
     setToggles({ ...hub.effects })
     setHeadScale(hub.params.data.head_scale || 1)
     setFxIntensity({ ...(hub.params.data as unknown as Record<string, number>) })
+    setAnim({
+      blink_enabled: hub.params.data.blink_enabled !== false,
+      blink_interval: hub.params.data.blink_interval ?? 3,
+      blink_duration: hub.params.data.blink_duration ?? 0.2,
+      pupil_size: hub.params.data.pupil_size ?? 1,
+      pupil_move: hub.params.data.pupil_move !== false,
+      mouth_amp: hub.params.data.mouth_amp ?? 1,
+      mouth_speed: hub.params.data.mouth_speed ?? 1,
+    })
   }
 
   useEffect(() => {
     hub.onStatus = (s) => setStatus(s)
     hub.onPlayStateChange = (p) => {
       setPlaying(p)
+      if (!p) setPaused(false)
       setToggles({ ...hub.effects })
     }
     hub.onScriptsChange = () => refresh()
@@ -247,11 +265,18 @@ export function MainPanel() {
     if (!current) return
     hub.playScript(current)
     setPlaying(true)
+    setPaused(false)
   }
 
   const stop = () => {
     hub.stopScript()
     setPlaying(false)
+    setPaused(false)
+  }
+
+  const pauseToggle = () => {
+    hub.togglePause()
+    setPaused(hub.isPaused)
   }
 
   const step = (dir: 1 | -1) => {
@@ -264,6 +289,7 @@ export function MainPanel() {
     refresh()
     hub.playScript(next)
     setPlaying(true)
+    setPaused(false)
   }
 
   const effectsList = current
@@ -362,6 +388,133 @@ export function MainPanel() {
                 </span>
               </label>
             ))}
+
+            <div className="fx-label"><Icon name="neutral" size={13} /> Эмоция:</div>
+            <div className="emotion-row">
+              {EMOTION_BUTTONS.map((e) => (
+                <button
+                  key={e.value}
+                  className={'emotion-btn' + (hub.emotion === e.value ? ' active' : '')}
+                  title={e.label}
+                  onClick={() => hub.setEmotion(e.value)}
+                >
+                  <Icon name={e.icon} size={15} />
+                </button>
+              ))}
+            </div>
+
+            <div className="fx-label"><Icon name="eye" size={13} /> Анимация (глаза/моргание/рот):</div>
+
+            <label className="fx-cb">
+              <input
+                type="checkbox"
+                checked={anim.blink_enabled !== false}
+                onChange={(ev) => {
+                  setAnim((prev) => ({ ...prev, blink_enabled: ev.target.checked }))
+                  hub.setAnimParam('blink_enabled', ev.target.checked)
+                }}
+              />
+              <Icon name="eye" size={14} className="chk-icon" />
+              <span>Моргание</span>
+            </label>
+
+            <label className="fx-slider">
+              <span className="fx-slider-label">Интервал моргания, с</span>
+              <input
+                type="range"
+                min={0.5}
+                max={10}
+                step={0.1}
+                value={anim.blink_interval as number}
+                onChange={(ev) => {
+                  const v = parseFloat(ev.target.value)
+                  setAnim((prev) => ({ ...prev, blink_interval: v }))
+                  hub.setAnimParam('blink_interval', v)
+                }}
+              />
+              <span className="fx-slider-val">{(anim.blink_interval as number).toFixed(1)}</span>
+            </label>
+
+            <label className="fx-slider">
+              <span className="fx-slider-label">Длительность моргания, с</span>
+              <input
+                type="range"
+                min={0.05}
+                max={1}
+                step={0.01}
+                value={anim.blink_duration as number}
+                onChange={(ev) => {
+                  const v = parseFloat(ev.target.value)
+                  setAnim((prev) => ({ ...prev, blink_duration: v }))
+                  hub.setAnimParam('blink_duration', v)
+                }}
+              />
+              <span className="fx-slider-val">{(anim.blink_duration as number).toFixed(2)}</span>
+            </label>
+
+            <label className="fx-slider">
+              <span className="fx-slider-label">Размер зрачков</span>
+              <input
+                type="range"
+                min={0.3}
+                max={2.5}
+                step={0.05}
+                value={anim.pupil_size as number}
+                onChange={(ev) => {
+                  const v = parseFloat(ev.target.value)
+                  setAnim((prev) => ({ ...prev, pupil_size: v }))
+                  hub.setAnimParam('pupil_size', v)
+                }}
+              />
+              <span className="fx-slider-val">{(anim.pupil_size as number).toFixed(2)}×</span>
+            </label>
+
+            <label className="fx-cb">
+              <input
+                type="checkbox"
+                checked={anim.pupil_move !== false}
+                onChange={(ev) => {
+                  setAnim((prev) => ({ ...prev, pupil_move: ev.target.checked }))
+                  hub.setAnimParam('pupil_move', ev.target.checked)
+                }}
+              />
+              <Icon name="eye" size={14} className="chk-icon" />
+              <span>Движение зрачков</span>
+            </label>
+
+            <label className="fx-slider">
+              <span className="fx-slider-label">Рот: размах</span>
+              <input
+                type="range"
+                min={0}
+                max={2}
+                step={0.05}
+                value={anim.mouth_amp as number}
+                onChange={(ev) => {
+                  const v = parseFloat(ev.target.value)
+                  setAnim((prev) => ({ ...prev, mouth_amp: v }))
+                  hub.setAnimParam('mouth_amp', v)
+                }}
+              />
+              <span className="fx-slider-val">{(anim.mouth_amp as number).toFixed(2)}</span>
+            </label>
+
+            <label className="fx-slider">
+              <span className="fx-slider-label">Рот: скорость</span>
+              <input
+                type="range"
+                min={0.2}
+                max={4}
+                step={0.1}
+                value={anim.mouth_speed as number}
+                onChange={(ev) => {
+                  const v = parseFloat(ev.target.value)
+                  setAnim((prev) => ({ ...prev, mouth_speed: v }))
+                  hub.setAnimParam('mouth_speed', v)
+                }}
+              />
+              <span className="fx-slider-val">{(anim.mouth_speed as number).toFixed(1)}×</span>
+            </label>
           </section>
 
           <section className="grp grp-status">
@@ -452,8 +605,12 @@ export function MainPanel() {
             <button className="btn btn-sm" onClick={saveScriptToFile} disabled={!current}><Icon name="save" size={13} /> Сохранить</button>
           </div>
           <div className="row">
-            <button className="btn btn-primary btn-sm btn-playwide" onClick={play} disabled={!current}>
-              <Icon name={playing ? 'pause' : 'play'} size={13} /> {playing ? 'Пауза' : 'Воспроизвести'}
+            <button
+              className="btn btn-primary btn-sm btn-playwide"
+              onClick={paused ? pauseToggle : playing ? pauseToggle : play}
+              disabled={!current}
+            >
+              <Icon name={paused || !playing ? 'play' : 'pause'} size={13} /> {paused ? 'Продолжить' : playing ? 'Пауза' : 'Воспроизвести'}
             </button>
             <button className="btn btn-sm btn-danger" onClick={stop} disabled={!current}><Icon name="stop" size={13} /> Стоп</button>
           </div>

@@ -35,6 +35,8 @@ export class SkullCanvas {
   emotion = 0
   private video: HTMLVideoElement | null = null
   private videoVisible = false
+  private videoFade = 0
+  private videoFadeTarget = 0
   colorEffect = false
   private cb: CanvasCallbacks = {}
   private dpr = 1
@@ -72,15 +74,18 @@ export class SkullCanvas {
   setVideoSource(video: HTMLVideoElement | null) {
     this.video = video
     this.videoVisible = !!video
+    this.videoFadeTarget = video ? 1 : 0
   }
 
   clearVideo() {
     this.video = null
     this.videoVisible = false
+    this.videoFadeTarget = 0
   }
 
   setVideoVisible(v: boolean) {
     this.videoVisible = v
+    this.videoFadeTarget = v ? 1 : 0
   }
 
   setAudioData(isPlaying: boolean, amplitude: number) {
@@ -104,8 +109,10 @@ export class SkullCanvas {
   updateParams(params: SkullParams) {
     this.renderer.params = params
     this.renderer.rebuildMask()
+    this.renderer.refreshPupils()
     this.staticDirty = true
     this.applyIntensities(params)
+    this.syncColorFromParams(params)
   }
 
   setModel(model: ModelData | null) {
@@ -163,38 +170,45 @@ export class SkullCanvas {
 
   setColorEffect(color: 'red' | 'white' | 'reset') {
     const p = this.renderer.params.data
-    if (color === 'reset') {
-      p.color_effect = false
-      p.color_effect_progress = 0
-      p.color_effect_target = 'red'
-      p.previous_color = 'red'
-      p.color_effect_active = false
-      this.colorEffect = false
-      return
-    }
-    p.color_effect = true
+    const target = color === 'reset' ? 'green' : color
+    if (p.color_effect_active && p.color_effect_target === target) return
+    p.previous_color = p.color_effect && p.color_effect_target !== 'green' ? p.color_effect_target : 'green'
+    p.color_effect_target = target
     p.color_effect_progress = 0
-    p.color_effect_target = color
-    p.previous_color = 'red'
     p.color_effect_active = true
+    p.color_effect = true
     this.colorEffect = true
-    this.animateColorEffect()
   }
 
-  private animateColorEffect() {
+  private syncColorFromParams(params: SkullParams) {
+    this.colorEffect = !!params.data.color_effect
+  }
+
+  private updateColor(dt: number) {
     const p = this.renderer.params.data
-    const step = () => {
-      if (!p.color_effect_active) return
-      p.color_effect_progress = Math.min(1, p.color_effect_progress + 0.04)
-      if (p.color_effect_progress >= 1) {
-        p.color_effect_progress = 1
-        p.color_effect_active = false
+    if (!p.color_effect_active) return
+    p.color_effect_progress = Math.min(1, p.color_effect_progress + dt * 1.2)
+    if (p.color_effect_progress >= 1) {
+      p.color_effect_progress = 1
+      p.color_effect_active = false
+      if (p.color_effect_target === 'green') {
+        p.color_effect = false
+        this.colorEffect = false
+      } else {
         this.colorEffect = true
-        return
       }
-      requestAnimationFrame(step)
     }
-    requestAnimationFrame(step)
+  }
+
+  private updateVideoFade(dt: number) {
+    if (Math.abs(this.videoFadeTarget - this.videoFade) < 0.001) {
+      this.videoFade = this.videoFadeTarget
+      return
+    }
+    const rate = 3
+    this.videoFade = this.videoFadeTarget > this.videoFade
+      ? Math.min(this.videoFadeTarget, this.videoFade + dt * rate)
+      : Math.max(this.videoFadeTarget, this.videoFade - dt * rate)
   }
 
   start() {
@@ -216,6 +230,8 @@ export class SkullCanvas {
 
   private update(dt: number) {
     this.renderer.updateFrame(dt)
+    this.updateColor(dt)
+    this.updateVideoFade(dt)
     this.effects.update(dt, this.canvas.clientWidth || 1920, this.canvas.clientHeight || 1080, this.renderer, this.amplitude)
     if (!this.isPlaying) {
       this.renderer.updateFromAudio(false, 0, dt)
@@ -322,7 +338,7 @@ export class SkullCanvas {
     const colorActive = this.colorEffect || this.renderer.params.data.color_effect_progress > 0
     const target = this.renderer.params.data.color_effect_target
 
-    if (this.videoVisible && this.video && this.video.readyState >= 2) {
+    if (this.video && this.video.readyState >= 2 && this.videoFade > 0.005) {
       const vw = this.video.videoWidth
       const vh = this.video.videoHeight
       if (vw > 0) {
@@ -331,19 +347,22 @@ export class SkullCanvas {
         const dh = vh * scale
         const dx = (width - dw) / 2
         const dy = (height - dh) / 2
+        ctx.save()
+        ctx.globalAlpha = this.videoFade
         ctx.drawImage(this.video, dx, dy, dw, dh)
+        ctx.restore()
       }
       ctx.save()
-      ctx.globalAlpha = 0.6
-      this.effects.drawVisualizerPublic(ctx, width, height)
+      ctx.globalAlpha = 0.6 * this.videoFade
+      this.effects.drawVisualizerPublic(ctx, width, height, colorActive, target)
       ctx.restore()
     } else {
-      this.effects.drawVisualizerPublic(ctx, width, height)
+      this.effects.drawVisualizerPublic(ctx, width, height, colorActive, target)
     }
 
     this.effects.drawBackgroundEffects(ctx, width, height, colorActive, target)
     this.drawSkull(ctx, width, height, colorActive, target)
-    this.effects.drawShatterFallingChars(ctx, width, height, this.renderer)
+    this.effects.drawShatterFallingChars(ctx, width, height, this.renderer, colorActive, target)
     this.effects.drawForeground(ctx, width, height, colorActive, target)
 
     this.frameCounter++
@@ -401,12 +420,9 @@ export class SkullCanvas {
             base = [0, b, 0]
           }
           if (colorActive) {
-            const rowProgress = y / r.rows
-            if (rowProgress <= r.params.data.color_effect_progress) {
-              const color = r.getColorForCell(x, y, base)
-              drawCell(x, y, char, `rgb(${color[0]},${color[1]},${color[2]})`)
-              continue
-            }
+            const color = r.getColorForCell(x, y, base)
+            drawCell(x, y, char, `rgb(${color[0]},${color[1]},${color[2]})`)
+            continue
           }
           drawCell(x, y, char, `rgb(${base[0]},${base[1]},${base[2]})`)
         }

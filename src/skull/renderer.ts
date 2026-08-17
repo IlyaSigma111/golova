@@ -90,6 +90,7 @@ export class SkullRenderer {
   modelBrightness: number[][] | null = null
   private modelGrid: string[][] | null = null
   private modelEye: boolean[][] | null = null
+  private modelMouth: boolean[][] | null = null
 
   offset_x = 0
   offset_y = 0
@@ -281,11 +282,12 @@ export class SkullRenderer {
 
   private initPupils() {
     this.pupils = []
+    const sizeMul = Math.max(0.3, this.params.data.pupil_size || 1)
     for (const eye of this.eye_areas) {
       this.pupils.push({
         x: eye.eye_x,
         y: eye.eye_y,
-        size: Math.max(2, Math.floor(Math.min(eye.w, eye.h) / 3)),
+        size: Math.max(2, Math.floor(Math.min(eye.w, eye.h) / 3) * sizeMul),
         char: '●',
         eye_x: eye.eye_x,
         eye_y: eye.eye_y,
@@ -293,6 +295,10 @@ export class SkullRenderer {
         offset_y: 0,
       })
     }
+  }
+
+  refreshPupils() {
+    this.initPupils()
   }
 
   buildEyebrows() {
@@ -357,6 +363,7 @@ export class SkullRenderer {
     this.modelMode = true
     this.modelGrid = model.grid_char.map((r) => r.slice())
     this.modelEye = model.is_eye.map((r) => r.slice())
+    this.modelMouth = model.is_mouth.map((r) => r.slice())
     this.modelBrightness = model.grid_brightness.map((r) => r.slice())
     this.grid = this.modelGrid.map((r) => r.slice())
     this.mask = Array.from({ length: rows }, () => Array(cols).fill(false))
@@ -371,6 +378,7 @@ export class SkullRenderer {
     this.mouth_y = mouth.y
     this.mouth_w = mouth.w
     this.mouth_cx = mouth.cx
+    this.mouth_h = mouth.h
 
     this.initPupils()
     this.buildEyebrows()
@@ -385,8 +393,8 @@ export class SkullRenderer {
     this.current_amplitude = 0
     this.blink_timer = 0
     this.is_blinking = false
-    this.blink_interval = 2 + Math.random() * 2
-    this.blink_duration = 0.3
+    this.blink_interval = Math.max(0.2, this.params.data.blink_interval || 3)
+    this.blink_duration = Math.max(0.03, this.params.data.blink_duration || 0.2)
     this.float_timer = 0
     this.toggleErosion(false)
   }
@@ -395,6 +403,7 @@ export class SkullRenderer {
     this.modelMode = false
     this.modelGrid = null
     this.modelEye = null
+    this.modelMouth = null
     this.modelBrightness = null
     this.rows = 45
     this.cols = 80
@@ -403,8 +412,8 @@ export class SkullRenderer {
     this.grid = Array.from({ length: this.rows }, () =>
       Array.from({ length: this.cols }, () => HEX[Math.floor(Math.random() * HEX.length)]),
     )
-    this.blink_duration = 0.1
-    this.blink_interval = 3 + Math.random() * 2
+    this.blink_duration = Math.max(0.03, this.params.data.blink_duration || 0.2)
+    this.blink_interval = Math.max(0.2, this.params.data.blink_interval || 3)
     this.blink_timer = 0
     this.is_blinking = false
     this.rebuildMask()
@@ -438,18 +447,42 @@ export class SkullRenderer {
     return { eyeMask, eye_areas }
   }
 
-  /** Widest enclosed hole below the eyes (upper 60% of the lower half) = mouth. */
-  private detectModelMouth(): { y: number; w: number; cx: number } {
+  /** Explicit is_mouth cells, or the widest enclosed hole below the eyes (upper 60% of the lower half) = mouth. */
+  private detectModelMouth(): { y: number; w: number; h: number; cx: number } {
+    if (this.modelMouth) {
+      let explicit = 0
+      for (let y = 0; y < this.rows; y++) for (let x = 0; x < this.cols; x++) if (this.modelMouth[y][x]) explicit++
+      if (explicit > 0) {
+        let minX = Infinity
+        let maxX = -1
+        let minY = Infinity
+        let maxY = -1
+        for (let y = 0; y < this.rows; y++) {
+          for (let x = 0; x < this.cols; x++) {
+            if (!this.modelMouth[y][x]) continue
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+          }
+        }
+        const w = maxX - minX + 1
+        const h = maxY - minY + 1
+        if (w >= 3) {
+          return { y: Math.round((minY + maxY) / 2), w, h, cx: Math.round((minX + maxX) / 2) }
+        }
+      }
+    }
     const holes = this.findEnclosedHoles()
     const eyeBottom = this.eye_areas.reduce((m, e) => Math.max(m, e.y + e.h / 2), 0)
     const lowerBound = this.cy + Math.floor((this.rows - this.cy) * 0.6)
-    let best = { y: 0, w: 0, cx: this.cx }
+    let best = { y: 0, w: 0, h: 0, cx: this.cx }
     for (const h of holes) {
       if (h.y < eyeBottom + 1) continue
       if (h.y > lowerBound) continue
-      if (h.w > best.w) best = { y: Math.round(h.cy), w: h.w, cx: Math.round(h.cx) }
+      if (h.w > best.w) best = { y: Math.round(h.cy), w: h.w, h: h.h, cx: Math.round(h.cx) }
     }
-    if (best.w < 3) return { y: 0, w: 0, cx: this.cx }
+    if (best.w < 3) return { y: 0, w: 0, h: 0, cx: this.cx }
     return best
   }
 
@@ -568,6 +601,16 @@ export class SkullRenderer {
   }
 
   private updatePupils() {
+    const move = this.params.data.pupil_move !== false
+    if (!move) {
+      this.global_offset_x = 0
+      this.global_offset_y = 0
+      for (const p of this.pupils) {
+        p.x = p.eye_x
+        p.y = p.eye_y
+      }
+      return
+    }
     this.pupil_timer += 1
     if (this.pupil_timer >= this.pupil_move_interval) {
       this.pupil_timer = 0
@@ -584,22 +627,29 @@ export class SkullRenderer {
   }
 
   private updateBlink(dt: number) {
+    const p = this.params.data
+    const interval = Math.max(0.2, p.blink_interval || 3)
+    const duration = Math.max(0.03, p.blink_duration || 0.2)
+    if (p.blink_enabled === false) {
+      this.is_blinking = false
+      this.blink_state = 0
+      return
+    }
     if (!this.is_blinking) {
       this.blink_timer += dt
-      if (this.blink_timer > this.blink_interval) {
+      if (this.blink_timer > interval) {
         this.is_blinking = true
         this.blink_timer = 0
-        this.blink_interval = 2 + Math.random() * 3
       }
     } else {
       this.blink_timer += dt
-      if (this.blink_timer > this.blink_duration) {
+      if (this.blink_timer > duration) {
         this.is_blinking = false
         this.blink_timer = 0
       }
     }
     if (this.is_blinking) {
-      const progress = this.blink_timer / this.blink_duration
+      const progress = this.blink_timer / duration
       this.blink_state = progress < 0.5 ? progress * 2 : 2 - progress * 2
     } else {
       this.blink_state = 0
@@ -613,13 +663,16 @@ export class SkullRenderer {
       this.target_mouth_open = 0
       this.rebuildMask()
     }
-    const speed = 0.25
+    const p = this.params.data
+    const amp = Math.max(0, p.mouth_amp || 1)
+    const speedMul = Math.max(0.2, p.mouth_speed || 1)
+    const speed = 0.25 * speedMul
     if (this.is_playing && this.current_amplitude > 0.005) {
       this.mouth_timer += dt
       if (this.mouth_timer > this.mouth_interval) {
         this.mouth_timer = 0
-        this.mouth_target = 0.3 + Math.random() * 0.7
-        this.mouth_interval = 0.1 + Math.random() * 0.2
+        this.mouth_target = (0.3 + Math.random() * 0.7) * amp
+        this.mouth_interval = (0.1 + Math.random() * 0.2) / speedMul
       }
       this.target_mouth_open = this.mouth_target
     } else {
@@ -685,16 +738,17 @@ export class SkullRenderer {
     const rowProgress = groupY / Math.max(1, this.rows / stepSize)
     const progress = p.color_effect_progress
     const brightness = base[1] > 0 ? base[1] : 100
-    if (rowProgress > progress) return base
     const b = Math.min(255, Math.max(0, brightness))
-    if (p.color_effect_target === 'red') return [Math.floor((255 * b) / 255), 0, 0]
-    if (p.color_effect_target === 'white') return [b, b, b]
-    if (p.color_effect_target === 'reset') {
-      if (p.previous_color === 'red') return [Math.floor((255 * b) / 255), 0, 0]
-      if (p.previous_color === 'white') return [b, b, b]
-      return base
-    }
-    return base
+    if (progress >= 1) return this.shade(p.color_effect_target, b)
+    // rows above the sweeping line → target color, below → the color we came from
+    if (rowProgress > progress) return this.shade(p.previous_color, b)
+    return this.shade(p.color_effect_target, b)
+  }
+
+  private shade(state: 'red' | 'white' | 'green', b: number): RGB {
+    if (state === 'red') return [Math.floor((255 * b) / 255), 0, 0]
+    if (state === 'white') return [b, b, b]
+    return [0, b, 0]
   }
 
   updateFrame(dt = 0.016) {
@@ -774,8 +828,8 @@ export class SkullRenderer {
           if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) {
             this.falling_chars.push({
               x, y, char: this.grid[y][x], start_x: x, start_y: y,
-              speed_y: 0.5 + Math.random() * 0.8,
-              speed_x: rnd(-0.3, 0.3),
+              speed_y: (0.15 + Math.random() * 0.3) * this.erosion_intensity,
+              speed_x: rnd(-0.2, 0.2),
               alpha: 1, progress: 0, life: 0,
             })
           }
@@ -811,11 +865,12 @@ export class SkullRenderer {
       const fc = this.falling_chars[i]
       fc.y += fc.speed_y
       fc.x += fc.speed_x
-      fc.speed_y += 0.02
+      fc.speed_y += 0.008
       fc.progress += dt
       fc.life += dt
-      if (fc.life > 0.5) fc.alpha = Math.max(0, fc.alpha - 0.03)
-      if (fc.y > this.rows + 10 || fc.alpha <= 0) this.falling_chars.splice(i, 1)
+      if (fc.life > 0.6) fc.alpha = Math.max(0, fc.alpha - 0.02)
+      // dissolve before reaching the bottom edge of the head
+      if (fc.y > this.rows - 3 || fc.alpha <= 0) this.falling_chars.splice(i, 1)
     }
   }
 

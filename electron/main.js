@@ -4,6 +4,7 @@ const fs = require('fs')
 
 let controlWindow = null
 const childWindows = new Map() // id -> { win, kind }
+let lastState = null
 
 const DEV = !app.isPackaged
 const indexPath = app.isPackaged
@@ -44,10 +45,17 @@ function createControlWindow() {
 }
 
 ipcMain.on('state:send', (e, payload) => {
+  lastState = payload
   for (const [, { win }] of childWindows) {
     if (!win.isDestroyed() && win.webContents.id !== e.sender.id) {
       win.webContents.send('state:apply', payload)
     }
+  }
+})
+
+ipcMain.on('child:ready', (e) => {
+  if (lastState && !e.sender.isDestroyed()) {
+    e.sender.send('state:apply', lastState)
   }
 })
 

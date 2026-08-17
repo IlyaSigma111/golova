@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('onyx', {
   readBinary: (p) => ipcRenderer.invoke('fs:readBinary', p),
   writeText: (p, d) => ipcRenderer.invoke('fs:writeText', p, d),
   sendState: (p) => ipcRenderer.send('state:send', p),
+  childReady: () => ipcRenderer.send('child:ready'),
   onState: (cb) => {
     const h = (_e, p) => cb(p)
     ipcRenderer.on('state:apply', h)

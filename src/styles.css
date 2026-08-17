@@ -1053,6 +1053,35 @@ body,
   background: #2a2a2a;
 }
 
+.emotion-row {
+  display: flex;
+  gap: 8px;
+}
+
+.emotion-btn {
+  flex: 1;
+  min-width: 44px;
+  justify-content: center;
+  border: 2px solid var(--border, #2a5a2a);
+  color: var(--green);
+  background: var(--bg-soft, #0c1a0c);
+  border-radius: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.emotion-btn:hover:not(:disabled) {
+  border-color: var(--green);
+  background: var(--bg-soft-2, #122212);
+}
+
+.emotion-btn.active {
+  border-color: var(--green);
+  background: #0e2a0e;
+  box-shadow: 0 0 10px rgba(52, 224, 122, 0.25);
+}
+
 .grp-status {
   margin-top: auto;
 }
