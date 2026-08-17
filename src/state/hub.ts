@@ -6,6 +6,7 @@ import { SkullParams } from '../skullParams'
 import { SkullCanvas } from '../skull/canvas'
 import { parseModel } from '../types'
 import type { EffectToggles, ModelData, ScriptData, SkullParamsData, StateMsg } from '../types'
+import defaultAvatarRaw from '../assets/avatar.json?raw'
 
 const anyOnyx = () => (window as unknown as {
   onyx?: {
@@ -62,8 +63,8 @@ class AppHub {
   isPaused = false
   isAutoPlaying = false
   autoPlayEnabled = true
-  modelActive = false
-  model: ModelData | null = null
+  modelActive = true
+  model: ModelData | null = parseModel(defaultAvatarRaw)
 
   onStatus: ((s: string) => void) | null = null
   onScriptsChange: (() => void) | null = null
@@ -112,6 +113,9 @@ class AppHub {
       isPlaying: this.isPlaying,
       amplitude: this.lastAmp,
     })
+    if (this.modelActive) {
+      this.broadcast({ kind: 'model', model: this.model })
+    }
   }
 
   status(s: string) {
@@ -122,6 +126,7 @@ class AppHub {
   setPreview(skull: SkullCanvas | null) {
     this.preview = skull
     if (skull) {
+      skull.setModel(this.model)
       skull.updateParams(this.params)
       skull.applyScriptToggles(this.effects)
       skull.setEmotion(this.emotion)
@@ -261,6 +266,11 @@ class AppHub {
     this.emotion = Math.max(-1, Math.min(1, emotion))
     this.preview?.setEmotion(this.emotion)
     this.broadcast({ kind: 'emotion', emotion: this.emotion })
+    
+    // Перекрас привязан к эмоциям
+    if (this.emotion === -1) this.setColor('red')
+    else if (this.emotion === 1) this.setColor('white')
+    else this.setColor('reset')
   }
 
   setHeadScale(scale: number) {
