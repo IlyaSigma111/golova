@@ -568,14 +568,37 @@ export class SkullCanvas {
         }
       }
 
-    // model eyes: blink overlay ('=' over eye cells while blinking)
-    if (r.modelMode && r.is_blinking) {
-      const ec = colorActive && target === 'red' ? 'rgba(255,140,0,0.85)' : 'rgba(0,230,200,0.85)'
+    // model eyes: natural blink (eyelids closing vertically)
+    if (r.modelMode && r.blink_state > 0) {
+      const baseColor: RGB = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 0]
       for (let y = 0; y < r.rows; y++) {
         for (let x = 0; x < r.cols; x++) {
           if (!r.isEye(x, y)) continue
           if (r.isEroded(x, y) || this.effects.isShattered(x, y)) continue
-          drawCell(x, y, '=', ec)
+          
+          let closestEye = r.eye_areas[0]
+          if (r.eye_areas.length > 1) {
+            let minDist = Infinity
+            for (const e of r.eye_areas) {
+              const dist = (e.x - x)**2 + (e.y - y)**2
+              if (dist < minDist) { minDist = dist; closestEye = e }
+            }
+          }
+          
+          if (!closestEye) continue
+          
+          const eyeCenterY = closestEye.y
+          const eyeHalfH = closestEye.h / 2
+          const openRadius = eyeHalfH * (1 - r.blink_state)
+          const distY = Math.abs(y - eyeCenterY)
+          
+          if (distY > openRadius + 0.5) {
+            const sc = colorActive ? r.getColorForCell(x, y, baseColor) : baseColor
+            drawCell(x, y, '█', `rgb(${sc[0]},${sc[1]},${sc[2]})`)
+          } else if (distY > openRadius - 0.5) {
+            const sc = colorActive ? r.getColorForCell(x, y, baseColor) : baseColor
+            drawCell(x, y, '─', `rgb(${sc[0]},${sc[1]},${sc[2]})`)
+          }
         }
       }
     }
