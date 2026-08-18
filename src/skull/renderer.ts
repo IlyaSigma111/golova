@@ -1,5 +1,13 @@
 import { SkullParams } from '../skullParams'
 import { ModelData } from '../types'
+import {
+  FaceAnimState,
+  createFaceAnimState,
+  updateFaceAnim,
+  getEffectiveBlinkLevels,
+  getPupilOffset,
+  blinkLevel,
+} from './faceAnim'
 
 export interface EyeArea {
   x: number
@@ -91,6 +99,9 @@ export class SkullRenderer {
   private modelGrid: string[][] | null = null
   private modelEye: boolean[][] | null = null
   private modelMouth: boolean[][] | null = null
+
+  /** Новый биофизический движок анимации лица */
+  faceAnim: FaceAnimState = createFaceAnimState()
 
   offset_x = 0
   offset_y = 0
@@ -403,6 +414,7 @@ export class SkullRenderer {
     this.blink_interval = Math.max(0.2, this.params.data.blink_interval || 3)
     this.blink_duration = Math.max(0.03, this.params.data.blink_duration || 0.2)
     this.float_timer = 0
+    this.faceAnim = createFaceAnimState()
     this.toggleErosion(false)
   }
 
@@ -423,6 +435,7 @@ export class SkullRenderer {
     this.blink_interval = Math.max(0.2, this.params.data.blink_interval || 3)
     this.blink_timer = 0
     this.is_blinking = false
+    this.faceAnim = createFaceAnimState()
     this.rebuildMask()
   }
 
@@ -607,67 +620,28 @@ export class SkullRenderer {
     this.rebuildMask()
   }
 
-  private updatePupils() {
-    const move = this.params.data.pupil_move !== false
-    if (!move) {
-      this.global_offset_x = 0
-      this.global_offset_y = 0
-      for (const p of this.pupils) {
-        p.x = p.eye_x
-        p.y = p.eye_y
-      }
-      return
-    }
-    this.pupil_timer += 1
-    if (this.pupil_timer >= this.pupil_move_interval) {
-      this.pupil_timer = 0
-      this.global_target_x = rnd(-2, 2)
-      this.global_target_y = rnd(-2, 2)
-    }
-    const speed = 0.015
-    this.global_offset_x += (this.global_target_x - this.global_offset_x) * speed
-    this.global_offset_y += (this.global_target_y - this.global_offset_y) * speed
+  private updatePupils(_dt: number) {
+    // Зрачки теперь управляются через faceAnim.saccade (саккады + дрейф + тремор)
+    const offset = getPupilOffset(this.faceAnim.saccade)
+    this.global_offset_x = offset.x
+    this.global_offset_y = offset.y
     for (const p of this.pupils) {
-      p.x = p.eye_x + this.global_offset_x
-      p.y = p.eye_y + this.global_offset_y
+      p.x = p.eye_x + offset.x
+      p.y = p.eye_y + offset.y
     }
   }
 
   private updateBlink(dt: number) {
     const p = this.params.data
     const baseInterval = Math.max(0.2, p.blink_interval || 3)
-    const duration = Math.max(0.03, p.blink_duration || 0.2)
-    if (p.blink_enabled === false) {
-      this.is_blinking = false
-      this.blink_state = 0
-      return
-    }
-    if (!this.is_blinking) {
-      this.blink_timer += dt
-      if (this.blink_timer > this.blink_interval) {
-        this.is_blinking = true
-        this.blink_timer = 0
-        // Естественное моргание: шанс 25% на быстрое двойное моргание, иначе рандом вокруг базы
-        if (this.blink_interval > 0.3 && Math.random() < 0.25) {
-          this.blink_interval = 0.15
-        } else {
-          this.blink_interval = baseInterval * (0.6 + Math.random() * 1.2)
-        }
-      }
-    } else {
-      this.blink_timer += dt
-      if (this.blink_timer > duration) {
-        this.is_blinking = false
-        this.blink_timer = 0
-      }
-    }
-    if (this.is_blinking) {
-      // Плавное открытие/закрытие (синусоида) вместо линейного, глаза не будут "дергаться"
-      const progress = this.blink_timer / duration
-      this.blink_state = Math.sin(progress * Math.PI)
-    } else {
-      this.blink_state = 0
-    }
+    const baseDuration = Math.max(0.03, p.blink_duration || 0.2)
+
+    // Делегируем новому биофизическому движку
+    // faceAnim.blink обновляется в updateFaceAnim(), здесь синхронизируем старые поля
+    // для обратной совместимости с canvas.ts
+    const bl = blinkLevel(this.faceAnim.blink)
+    this.blink_state = bl
+    this.is_blinking = bl > 0.01
   }
 
   private updateMouth(dt: number) {
@@ -675,31 +649,29 @@ export class SkullRenderer {
       this.mouth_reset_needed = false
       this.mouth_open = 0
       this.target_mouth_open = 0
+      this.faceAnim.mouth.openness = 0
+      this.faceAnim.mouth.velocity = 0
+      this.faceAnim.mouth.target = 0
       this.rebuildMask()
     }
-    const p = this.params.data
-    const amp = Math.max(0, p.mouth_amp || 1)
-    const speedMul = Math.max(0.2, p.mouth_speed || 1)
-    // Увеличиваем скорость реакции рта для более точного лип-синка (было 0.25)
-    const speed = 0.45 * speedMul
-    if (this.is_playing && this.current_amplitude > 0.005) {
-      // Прямая привязка к громкости звука (с небольшим бустом)
-      // Теперь рот будет открываться на громких звуках и прикрываться на тихих синхронно с аудио
-      this.target_mouth_open = Math.min(1, this.current_amplitude * 3.5 * amp)
-    } else {
-      this.target_mouth_open = 0
-    }
-    this.mouth_open += (this.target_mouth_open - this.mouth_open) * speed
+
+    // Рот теперь управляется через faceAnim.mouth (spring/damping + idle breathing)
+    // Синхронизируем старые поля для обратной совместимости
+    this.mouth_open = this.faceAnim.mouth.openness
+    this.target_mouth_open = this.faceAnim.mouth.target
+
     const nowOpen = this.mouth_open > 0.02
     if (nowOpen || this.mouthWasOpen) this.rebuildMask()
     this.mouthWasOpen = nowOpen
     if (this.mouth_open > 0.05) {
+      const wf = this.faceAnim.mouth.widthFactor
       const openH = Math.floor(2 + this.mouth_open * 1.5)
       if (openH > 0) {
         for (let y = this.mouth_y; y < Math.min(this.rows, this.mouth_y + openH); y++) {
           const yOffset = (y - this.mouth_y) / Math.max(1, openH)
-          const widthFactor = 1 - yOffset * 0.15
-          const mw = Math.floor(this.mouth_w * widthFactor)
+          // Адаптивная ширина: widthFactor растёт при широком открытии
+          const widthScale = wf * (1 - yOffset * 0.15)
+          const mw = Math.floor(this.mouth_w * widthScale)
           for (let x = this.mouth_cx - Math.floor(mw / 2); x < this.mouth_cx + Math.floor(mw / 2); x++) {
             if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) this.mask[y][x] = false
           }
@@ -718,9 +690,6 @@ export class SkullRenderer {
     if (isPlaying && !this.is_playing) this.mouth_reset_needed = true
     this.is_playing = isPlaying
     this.current_amplitude = amplitude
-    this.updateBlink(dt)
-    this.updateFloat(dt)
-    this.updateMouth(dt)
   }
 
   isBorder(x: number, y: number): boolean {
@@ -763,6 +732,27 @@ export class SkullRenderer {
 
   updateFrame(dt = 0.016) {
     this.frame_count++
+    
+    // Единый тик биофизического движка анимации лица
+    const p = this.params.data
+    updateFaceAnim(this.faceAnim, dt, {
+      blinkEnabled: p.blink_enabled !== false,
+      blinkInterval: Math.max(0.2, p.blink_interval || 3),
+      blinkDuration: Math.max(0.03, p.blink_duration || 0.2),
+      pupilMove: p.pupil_move !== false,
+      pupilScale: Math.max(0.3, p.pupil_size || 1),
+      isPlaying: this.is_playing,
+      amplitude: this.current_amplitude,
+      mouthAmp: Math.max(0, p.mouth_amp || 1),
+      mouthSpeed: Math.max(0.2, p.mouth_speed || 1),
+    })
+
+    // Синхронизация старых полей
+    this.updateBlink(dt)
+    this.updateFloat(dt)
+    this.updateMouth(dt)
+    this.updatePupils(dt)
+
     this.updateErosion(dt)
     this.updateFallingChars(dt)
     if (!this.modelMode && this.frame_count % 3 === 0) {
@@ -774,7 +764,6 @@ export class SkullRenderer {
         }
       }
     }
-    this.updatePupils()
   }
 
   toggleErosion(active: boolean) {
