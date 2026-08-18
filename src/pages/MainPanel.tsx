@@ -545,8 +545,9 @@ export function MainPanel() {
             </label>
           </section>
 
-          {/* ── 6. ИИ Режим ── */}
-          <section className="grp">
+          {/* ── 6. ИИ Режим (Скрыт временно по просьбе) ── 
+          {/* ── 6. ИИ Режим (Скрыт временно по просьбе) ── */}
+          <section className="grp" style={{ display: 'none' }}>
             <div className="grp-title"><Icon name="terminal" size={14} /> ИИ Режим (Gemini)</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0 4px', marginBottom: '4px' }}>
               <input

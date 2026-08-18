@@ -2,6 +2,7 @@ import { SkullRenderer, RGB } from './renderer'
 import { EffectsEngine } from './effects'
 import { SkullParams } from '../skullParams'
 import { EffectToggles, ModelData } from '../types'
+import { getEffectiveBlinkLevels } from './faceAnim'
 
 export interface CanvasCallbacks {
   onFrame?: (bitmap: ImageBitmap) => void
@@ -44,6 +45,8 @@ export class SkullCanvas {
   private displayCb: (() => void) | null = null
   private staticCache: HTMLCanvasElement | null = null
   private staticDirty = true
+  private mouthMask = new Uint8Array(0)
+  private mouthNearCoords: number[] = []
 
   constructor(canvas: HTMLCanvasElement, params: SkullParams, cb: CanvasCallbacks = {}) {
     this.canvas = canvas
@@ -266,21 +269,38 @@ export class SkullCanvas {
     }
   }
 
-  private computeMouth(r: SkullRenderer, mouthArea: Set<string>, mouthNear: Set<string>) {
-    const add = (set: Set<string>, x: number, y: number) => {
-      if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) set.add(`${x},${y}`)
+  private computeMouth(r: SkullRenderer) {
+    const needed = r.rows * r.cols
+    if (this.mouthMask.length < needed) {
+      this.mouthMask = new Uint8Array(needed)
     }
+    this.mouthMask.fill(0)
+    this.mouthNearCoords.length = 0
+
+    const addArea = (x: number, y: number) => {
+      if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) {
+        this.mouthMask[y * r.cols + x] = 1
+      }
+    }
+    const addNear = (x: number, y: number) => {
+      if (x >= 0 && x < r.cols && y >= 0 && y < r.rows) {
+        const idx = y * r.cols + x
+        if (this.mouthMask[idx] !== 1) {
+          this.mouthMask[idx] = 2
+          this.mouthNearCoords.push(x, y)
+        }
+      }
+    }
+
     const w = r.mouth_w
     const cx = r.mouth_cx
     if (r.mouth_open < 0.05) {
       const halfH = Math.max(1, Math.floor(r.mouth_h / 2))
       for (let y = r.mouth_y - halfH; y <= r.mouth_y + halfH; y++) {
-        for (let x = cx - Math.floor(w / 2); x < cx + Math.floor(w / 2); x++) add(mouthArea, x, y)
+        for (let x = cx - Math.floor(w / 2); x < cx + Math.floor(w / 2); x++) addArea(x, y)
       }
       for (let y = r.mouth_y - halfH - 1; y <= r.mouth_y + halfH + 1; y++) {
-        for (let x = cx - Math.floor(w / 2) - 1; x < cx + Math.floor(w / 2) + 1; x++) {
-          if (!mouthArea.has(`${x},${y}`)) add(mouthNear, x, y)
-        }
+        for (let x = cx - Math.floor(w / 2) - 1; x < cx + Math.floor(w / 2) + 1; x++) addNear(x, y)
       }
     } else {
       const openH = Math.floor(2 + r.mouth_open * 1.5)
@@ -288,13 +308,13 @@ export class SkullCanvas {
         for (let y = r.mouth_y; y < Math.min(r.rows, r.mouth_y + openH); y++) {
           const yOff = (y - r.mouth_y) / Math.max(1, openH)
           const mw = Math.floor(w * (1 - yOff * 0.15))
-          for (let x = cx - Math.floor(mw / 2); x < cx + Math.floor(mw / 2); x++) add(mouthArea, x, y)
+          for (let x = cx - Math.floor(mw / 2); x < cx + Math.floor(mw / 2); x++) addArea(x, y)
         }
       }
     }
   }
 
-  private buildStaticCache(L: Layout, mouthArea: Set<string>, mouthNear: Set<string>) {
+  private buildStaticCache(L: Layout) {
     const r = this.renderer
     const off = document.createElement('canvas')
     const totalW = Math.ceil(r.cols * L.cellW)
@@ -311,7 +331,7 @@ export class SkullCanvas {
         if (r.isEroded(x, y)) continue
         if (this.effects.isShattered(x, y)) continue
         if (r.isEye(x, y)) continue
-        if (mouthArea.has(`${x},${y}`) || mouthNear.has(`${x},${y}`)) continue
+        if (this.mouthMask.length >= r.rows * r.cols && this.mouthMask[y * r.cols + x] !== 0) continue
         const dist = Math.abs(x - r.cx) / r.cols
         let b: number
         if (r.modelBrightness) {
@@ -384,9 +404,7 @@ export class SkullCanvas {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
 
-    const mouthArea = new Set<string>()
-    const mouthNear = new Set<string>()
-    this.computeMouth(r, mouthArea, mouthNear)
+    this.computeMouth(r)
 
     const drawCell = (x: number, y: number, char: string, color: string) => {
       ctx.fillStyle = color
@@ -403,8 +421,15 @@ export class SkullCanvas {
           if (this.effects.isShattered(x, y)) continue
           const char = r.grid[y][x]
           const isBorder = r.isBorder(x, y)
-          const isMouth = mouthArea.has(`${x},${y}`)
-          const isMouthNear = mouthNear.has(`${x},${y}`)
+          
+          let isMouth = false
+          let isMouthNear = false
+          if (this.mouthMask.length >= r.rows * r.cols) {
+            const mVal = this.mouthMask[y * r.cols + x]
+            isMouth = mVal === 1
+            isMouthNear = mVal === 2
+          }
+
           const isEye = r.isEye(x, y)
           if (isMouth) continue
           let base: RGB
@@ -430,11 +455,12 @@ export class SkullCanvas {
     } else {
       if (r.mouth_open > 0.02) this.staticDirty = true
       if (this.staticDirty || !this.staticCache) {
-        this.buildStaticCache(L, mouthArea, mouthNear)
+        this.buildStaticCache(L)
       }
       ctx.drawImage(this.staticCache!, startX + ox, startY + oy)
-      for (const k of mouthNear) {
-        const [x, y] = k.split(',').map(Number)
+      for (let i = 0; i < this.mouthNearCoords.length; i += 2) {
+        const x = this.mouthNearCoords[i]
+        const y = this.mouthNearCoords[i + 1]
         drawCell(x, y, r.grid[y][x], 'rgb(0,150,0)')
       }
     }
@@ -502,11 +528,20 @@ export class SkullCanvas {
     }
     }
 
-    // eyes (outline 'O'), skipped while blinking (parametric only)
-    if (!r.modelMode && r.blink_state < 0.5) {
-      for (const eye of r.eye_areas) {
+    // eyes (outline 'O'), with per-eye blink levels (parametric only)
+    if (!r.modelMode) {
+      const blinkLevels = getEffectiveBlinkLevels(r.faceAnim)
+      for (let eIdx = 0; eIdx < r.eye_areas.length; eIdx++) {
+        const eye = r.eye_areas[eIdx]
+        const isLeftEye = eye.x < r.cx
+        const eyeBlinkLevel = isLeftEye ? blinkLevels.left : blinkLevels.right
+        // Полностью закрытый глаз — не рисуем
+        if (eyeBlinkLevel > 0.95) continue
+
         const halfW = Math.max(2, Math.floor(eye.w / 2))
         const halfH = Math.max(2, Math.floor(eye.h / 2))
+        // Сужение видимой области глаза при моргании (веко опускается сверху)
+        const visibleRadius = halfH * (1 - eyeBlinkLevel)
         for (let y = eye.y - halfH; y < eye.y + halfH; y++) {
           for (let x = eye.x - halfW; x < eye.x + halfW; x++) {
             if (x < 0 || x >= r.cols || y < 0 || y >= r.rows) continue
@@ -514,6 +549,9 @@ export class SkullCanvas {
             const dx = x - eye.x
             const dy = y - eye.y
             if (dx * dx / (halfW * halfW) + dy * dy / (halfH * halfH) >= 1) continue
+            // Если клетка выше линии века — скрыта
+            const distFromCenter = Math.abs(dy)
+            if (distFromCenter > visibleRadius + 0.5) continue
             let isEdge = false
             outer:
             for (let ddy = -1; ddy <= 1; ddy++) {
@@ -531,7 +569,12 @@ export class SkullCanvas {
                 }
               }
             }
-            if (isEdge) {
+            // Линия века — рисуем '─' на границе закрытия
+            if (distFromCenter > visibleRadius - 0.5 && eyeBlinkLevel > 0.05) {
+              const base: RGB = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 0]
+              const color = colorActive ? r.getColorForCell(x, y, base) : base
+              drawCell(x, y, '─', `rgb(${color[0]},${color[1]},${color[2]})`)
+            } else if (isEdge) {
               const base: RGB = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 0]
               const color = colorActive ? r.getColorForCell(x, y, base) : base
               drawCell(x, y, 'O', `rgb(${color[0]},${color[1]},${color[2]})`)
@@ -541,17 +584,28 @@ export class SkullCanvas {
       }
     }
 
-      // model mouth overlay
+      // model mouth overlay with brightness gradient
       if (r.modelMode && r.mouth_w > 0) {
-        const mc = colorActive && target === 'red' ? 'rgba(255,140,0,0.9)' : 'rgba(0,255,0,0.95)'
         const halfW = Math.max(1, Math.floor(r.mouth_w / 2))
+        const wf = r.faceAnim.mouth.widthFactor
+        const roundness = r.faceAnim.mouth.roundness
         
         if (r.mouth_open <= 0.04) {
+          // Closed mouth — always visible as anatomical line with brightness gradient
           for (let x = r.mouth_cx - halfW; x <= r.mouth_cx + halfW; x++) {
-            if (x >= 0 && x < r.cols) drawCell(x, r.mouth_y, '─', mc)
+            if (x >= 0 && x < r.cols) {
+              // Brightness gradient: brightest at center, dimmer at corners
+              const distFromCenter = Math.abs(x - r.mouth_cx) / Math.max(1, halfW)
+              const brightness = Math.floor(255 * (1 - distFromCenter * 0.4))
+              const mc = colorActive && target === 'red'
+                ? `rgba(${brightness},${Math.floor(brightness * 0.55)},0,0.9)`
+                : `rgba(0,${brightness},0,0.95)`
+              drawCell(x, r.mouth_y, '─', mc)
+            }
           }
         } else {
-          const rowsCount = Math.max(1, Math.ceil(r.mouth_open * 4)) // spans up to 4 rows
+          const adaptiveHalfW = Math.floor(halfW * wf)
+          const rowsCount = Math.max(1, Math.ceil(r.mouth_open * 4))
           for (let dy = 0; dy < rowsCount; dy++) {
             let glyph = '█'
             if (dy === rowsCount - 1) {
@@ -559,8 +613,20 @@ export class SkullCanvas {
               if (fraction < 0.3) glyph = '▂'
               else if (fraction < 0.7) glyph = '▄'
             }
-            for (let x = r.mouth_cx - halfW; x <= r.mouth_cx + halfW; x++) {
+            // Row width narrows toward the bottom (lip shape) and adapts with roundness
+            const yProgress = dy / Math.max(1, rowsCount)
+            const rowNarrow = roundness > 0.3
+              ? 1 - yProgress * 0.25 * roundness  // rounded: slight narrowing
+              : 1 - yProgress * 0.15              // flat: minimal narrowing
+            const rowHalfW = Math.floor(adaptiveHalfW * rowNarrow)
+            for (let x = r.mouth_cx - rowHalfW; x <= r.mouth_cx + rowHalfW; x++) {
               if (x >= 0 && x < r.cols && (r.mouth_y + dy) < r.rows) {
+                // Brightness: center→corners gradient for depth
+                const distFromCenter = Math.abs(x - r.mouth_cx) / Math.max(1, rowHalfW)
+                const brightness = Math.floor(255 * (1 - distFromCenter * 0.35))
+                const mc = colorActive && target === 'red'
+                  ? `rgba(${brightness},${Math.floor(brightness * 0.55)},0,0.9)`
+                  : `rgba(0,${brightness},0,0.95)`
                 drawCell(x, r.mouth_y + dy, glyph, mc)
               }
             }
@@ -568,36 +634,46 @@ export class SkullCanvas {
         }
       }
 
-    // model eyes: natural blink (eyelids closing vertically)
-    if (r.modelMode && r.blink_state > 0) {
-      const baseColor: RGB = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 0]
-      for (let y = 0; y < r.rows; y++) {
-        for (let x = 0; x < r.cols; x++) {
-          if (!r.isEye(x, y)) continue
-          if (r.isEroded(x, y) || this.effects.isShattered(x, y)) continue
-          
-          let closestEye = r.eye_areas[0]
-          if (r.eye_areas.length > 1) {
-            let minDist = Infinity
-            for (const e of r.eye_areas) {
-              const dist = (e.x - x)**2 + (e.y - y)**2
-              if (dist < minDist) { minDist = dist; closestEye = e }
+    // model eyes: per-eye blink with asymmetric easing
+    if (r.modelMode) {
+      const levels = getEffectiveBlinkLevels(r.faceAnim)
+      // Only draw overlays if at least one eye is partially closed
+      if (levels.left > 0.01 || levels.right > 0.01) {
+        const baseColor: RGB = colorActive && target === 'red' ? [255, 140, 0] : [0, 255, 0]
+        for (let y = 0; y < r.rows; y++) {
+          for (let x = 0; x < r.cols; x++) {
+            if (!r.isEye(x, y)) continue
+            if (r.isEroded(x, y) || this.effects.isShattered(x, y)) continue
+            
+            // Find closest eye and determine blink level
+            let closestEye = r.eye_areas[0]
+            if (r.eye_areas.length > 1) {
+              let minDist = Infinity
+              for (const e of r.eye_areas) {
+                const dist = (e.x - x)**2 + (e.y - y)**2
+                if (dist < minDist) { minDist = dist; closestEye = e }
+              }
             }
-          }
-          
-          if (!closestEye) continue
-          
-          const eyeCenterY = closestEye.y
-          const eyeHalfH = closestEye.h / 2
-          const openRadius = eyeHalfH * (1 - r.blink_state)
-          const distY = Math.abs(y - eyeCenterY)
-          
-          if (distY > openRadius + 0.5) {
-            const sc = colorActive ? r.getColorForCell(x, y, baseColor) : baseColor
-            drawCell(x, y, '█', `rgb(${sc[0]},${sc[1]},${sc[2]})`)
-          } else if (distY > openRadius - 0.5) {
-            const sc = colorActive ? r.getColorForCell(x, y, baseColor) : baseColor
-            drawCell(x, y, '─', `rgb(${sc[0]},${sc[1]},${sc[2]})`)
+            
+            if (!closestEye) continue
+            
+            // Per-eye blink level
+            const isLeftEye = closestEye.x < r.cx
+            const eyeLevel = isLeftEye ? levels.left : levels.right
+            if (eyeLevel < 0.01) continue
+            
+            const eyeCenterY = closestEye.y
+            const eyeHalfH = closestEye.h / 2
+            const openRadius = eyeHalfH * (1 - eyeLevel)
+            const distY = Math.abs(y - eyeCenterY)
+            
+            if (distY > openRadius + 0.5) {
+              const sc = colorActive ? r.getColorForCell(x, y, baseColor) : baseColor
+              drawCell(x, y, '█', `rgb(${sc[0]},${sc[1]},${sc[2]})`)
+            } else if (distY > openRadius - 0.5) {
+              const sc = colorActive ? r.getColorForCell(x, y, baseColor) : baseColor
+              drawCell(x, y, '─', `rgb(${sc[0]},${sc[1]},${sc[2]})`)
+            }
           }
         }
       }
