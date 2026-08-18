@@ -575,17 +575,38 @@ export function MainPanel() {
                   }
                 }}
               />
-              <button
-                className="btn btn-sm btn-block"
-                disabled={aiLoading || !aiPrompt.trim()}
-                onClick={() => {
-                  setAiLoading(true)
-                  hub.askAi(aiPrompt, aiApiKey, setAiResponseText).finally(() => setAiLoading(false))
-                  setAiPrompt('')
-                }}
-              >
-                {aiLoading ? 'Думает...' : 'Спросить (Enter)'}
-              </button>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  className="btn btn-sm"
+                  style={{ flex: 1 }}
+                  disabled={aiLoading || !aiPrompt.trim()}
+                  onClick={() => {
+                    setAiLoading(true)
+                    hub.askAi(aiPrompt, aiApiKey, setAiResponseText).finally(() => setAiLoading(false))
+                    setAiPrompt('')
+                  }}
+                >
+                  {aiLoading ? 'Думает...' : 'Отправить'}
+                </button>
+                <button
+                  className="btn btn-sm btn-accent"
+                  title="Сказать голосом"
+                  onClick={() => {
+                    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                    if (!SpeechRecognition) return alert('Голосовой ввод не поддерживается.');
+                    const recognition = new SpeechRecognition();
+                    recognition.lang = 'ru-RU';
+                    recognition.onresult = (e: any) => {
+                      const text = e.results[0][0].transcript;
+                      setAiLoading(true);
+                      hub.askAi(text, aiApiKey, setAiResponseText).finally(() => setAiLoading(false));
+                    };
+                    recognition.start();
+                  }}
+                >
+                  🎙
+                </button>
+              </div>
               {aiResponseText && (
                 <div style={{ fontSize: '11px', color: '#88e0a0', marginTop: '4px', lineHeight: '1.3', maxHeight: '120px', overflowY: 'auto', padding: '4px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
                   {aiResponseText}
